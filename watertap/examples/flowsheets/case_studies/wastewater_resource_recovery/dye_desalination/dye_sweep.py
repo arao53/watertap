@@ -4,6 +4,7 @@ import time
 
 from pyomo.environ import Constraint
 from watertap.tools.parameter_sweep import _init_mpi, LinearSample, parameter_sweep
+from watertap.tools.sweep_visualizer import line_plot
 import watertap.examples.flowsheets.case_studies.wastewater_resource_recovery.dye_desalination.dye_desalination as dye_desalination
 
 
@@ -21,7 +22,6 @@ def set_up_sensitivity(m):
 
 
 def run_analysis(case_num, nx, interpolate_nan_outputs=True):
-
     m = dye_desalination.main()[0]
 
     outputs, optimize_kwargs, opt_function = set_up_sensitivity(m)
@@ -76,7 +76,7 @@ def run_analysis(case_num, nx, interpolate_nan_outputs=True):
     else:
         raise ValueError("case_num = %d not recognized." % (case_num))
 
-    output_filename = "sensitivity_" + str(case_num)
+    output_filename = merge_path("sensitivity_" + str(case_num) + ".csv")
     global_results = parameter_sweep(
         m,
         sweep_params,
@@ -90,7 +90,23 @@ def run_analysis(case_num, nx, interpolate_nan_outputs=True):
     return global_results, sweep_params, m
 
 
-def main(case_num=7, nx=10, interpolate_nan_outputs=True):
+def merge_path(filename):
+    source_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), filename)
+    return source_path
+
+
+def visualize_results(
+    case_num, plot_type, xlabel, ylabel, xunit=None, yunit=None, zlabel=None, zunit=None
+):
+    data_file = merge_path("sensitivity_" + str(case_num) + ".csv")
+    if plot_type == "line":
+        fig, ax = line_plot(data_file, xlabel, ylabel, xunit, yunit)
+    else:
+        raise ValueError("Plot type not yet implemented")
+    return fig
+
+
+def main(case_num=1, nx=10, interpolate_nan_outputs=False):
     # when from the command line
     case_num = int(case_num)
     nx = int(nx)
@@ -102,6 +118,7 @@ def main(case_num=7, nx=10, interpolate_nan_outputs=True):
         case_num, nx, interpolate_nan_outputs
     )
     print(global_results)
+    visualize_results(case_num, plot_type="line", xlabel="# dye_cost", ylabel="LCOW")
 
     return global_results, m
 

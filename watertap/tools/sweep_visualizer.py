@@ -15,7 +15,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-def line_plot(data_path, xlabel, ylabel, xunit=None, yunit=None, save_path=None):
+def line_plot(data_path, xlabel, ylabel, xunit=None, yunit=None, filetype=".pdf"):
     """
     Description: plots a simple line and returns the figure object
     params:
@@ -33,7 +33,7 @@ def line_plot(data_path, xlabel, ylabel, xunit=None, yunit=None, save_path=None)
 
     # create figure object
     plt.rcParams.update({"font.size": 10})
-    fig, ax = plt.subplots(size=(5.1667, 5.1667))  # default size for SIAM
+    fig, ax = plt.subplots(figsize=(5.1667, 5.1667))  # default size for SIAM
     ax.plot(df[xlabel].values, df[ylabel].values)
 
     # Add axes labels
@@ -46,8 +46,8 @@ def line_plot(data_path, xlabel, ylabel, xunit=None, yunit=None, save_path=None)
     ax.set_ylabel(ylabel)
 
     # save file
-    if save_path:
-        plt.savefig(data_path - ".csv" + ".pdf", dpi=300)
+    if save_path is None:
+        plt.savefig(data_path.split(".")[0] + filetype, dpi=300)
 
     # return figure and axes objects
     return fig, ax
@@ -115,7 +115,7 @@ def contour_plot(
         zlabel += " [" + zunit + "]"
     ax.set_title(zlabel)
 
-    if save_path:
+    if save_path is None:
         plt.savefig(data_path - ".csv" + ".pdf", dpi=300)
 
     return fig, ax
