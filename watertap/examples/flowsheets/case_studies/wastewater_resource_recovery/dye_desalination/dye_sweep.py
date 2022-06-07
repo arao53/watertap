@@ -4,7 +4,7 @@ import time
 
 from pyomo.environ import Constraint
 from watertap.tools.parameter_sweep import _init_mpi, LinearSample, parameter_sweep
-from watertap.tools.sweep_visualizer import line_plot
+from watertap.tools.sweep_visualizer import line_plot, contour_plot
 import watertap.examples.flowsheets.case_studies.wastewater_resource_recovery.dye_desalination.dye_desalination as dye_desalination
 
 
@@ -96,17 +96,32 @@ def merge_path(filename):
 
 
 def visualize_results(
-    case_num, plot_type, xlabel, ylabel, xunit=None, yunit=None, zlabel=None, zunit=None
+    case_num,
+    plot_type,
+    xlabel,
+    ylabel,
+    xunit=None,
+    yunit=None,
+    zlabel=None,
+    zunit=None,
+    levels=None,
+    cmap=None,
+    isolines=None,
 ):
     data_file = merge_path("sensitivity_" + str(case_num) + ".csv")
     if plot_type == "line":
         fig, ax = line_plot(data_file, xlabel, ylabel, xunit, yunit)
+
+    elif plot_type == "contour":
+        fig, ax = contour_plot(
+            data_file, xlabel, ylabel, zlabel, xunit, yunit, zunit, isolines=isolines
+        )
     else:
         raise ValueError("Plot type not yet implemented")
     return fig
 
 
-def main(case_num=1, nx=10, interpolate_nan_outputs=False):
+def main(case_num=6, nx=10, interpolate_nan_outputs=False):
     # when from the command line
     case_num = int(case_num)
     nx = int(nx)
@@ -118,8 +133,16 @@ def main(case_num=1, nx=10, interpolate_nan_outputs=False):
         case_num, nx, interpolate_nan_outputs
     )
     print(global_results)
-    visualize_results(case_num, plot_type="line", xlabel="# dye_cost", ylabel="LCOW")
 
+    # visualize_results(case_num, plot_type="line", xlabel="# dye_cost", ylabel="LCOW", xunit="$/kg", yunit="$/m3")
+    visualize_results(
+        case_num,
+        plot_type="contour",
+        xlabel="# dye_cost",
+        ylabel="waste_disposal",
+        zlabel="LCOW",
+        isolines=[1, 2],
+    )
     return global_results, m
 
 

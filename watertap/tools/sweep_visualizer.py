@@ -46,8 +46,7 @@ def line_plot(data_path, xlabel, ylabel, xunit=None, yunit=None, filetype=".pdf"
     ax.set_ylabel(ylabel)
 
     # save file
-    if save_path is None:
-        plt.savefig(data_path.split(".")[0] + filetype, dpi=300)
+    plt.savefig(data_path.split(".")[0] + filetype, dpi=300)
 
     # return figure and axes objects
     return fig, ax
@@ -64,7 +63,7 @@ def contour_plot(
     levels=10,
     cmap="viridis",
     isolines=None,
-    save_path=None,
+    filetype=".pdf",
 ):
     """
     Description: plots a filled contour and returns the figure object
@@ -93,13 +92,14 @@ def contour_plot(
 
     # create plot
     plt.rcParams.update({"font.size": 10})
-    fig, ax = plt.subplots(size=(5.1667, 5.1667))  # default size for SIAM
+    fig, ax = plt.subplots(figsize=(5.1667, 5.1667))  # default size for SIAM
     cs = ax.contourf(X, Y, Z, levels=levels, cmap=cmap)
     cbar = fig.colorbar(cs)
 
     # add isolines as needed
     if isolines is not None:
-        cs_lvl = ax.contour(cs, isolines, colors="k", linewidths=3, linestyles="dashed")
+        cs_lvl = ax.contour(cs, levels=isolines, colors="k", linewidths=1)
+        ax.clabel(cs_lvl, inline=True, fontsize=8)
         cbar.add_lines(cs_lvl)
 
     # Add axes labels
@@ -115,8 +115,7 @@ def contour_plot(
         zlabel += " [" + zunit + "]"
     ax.set_title(zlabel)
 
-    if save_path is None:
-        plt.savefig(data_path - ".csv" + ".pdf", dpi=300)
+    plt.savefig(data_path.split(".")[0] + filetype, dpi=300)
 
     return fig, ax
 
