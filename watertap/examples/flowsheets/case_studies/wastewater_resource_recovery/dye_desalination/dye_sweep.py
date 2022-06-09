@@ -134,15 +134,13 @@ def main(case_num=6, nx=10, interpolate_nan_outputs=False):
     )
     print(global_results)
 
-    # visualize_results(case_num, plot_type="line", xlabel="# dye_cost", ylabel="LCOW", xunit="$/kg", yunit="$/m3")
-    visualize_results(
-        case_num,
-        plot_type="contour",
-        xlabel="# dye_cost",
-        ylabel="waste_disposal",
-        zlabel="LCOW",
-        isolines=[1, 2],
+    # visualize results
+    data_file = merge_path("sensitivity_" + str(case_num) + ".csv")
+    # line_plot(data_file, "# dye_cost", "LCOW")
+    contour_plot(
+        data_file, "# dye_cost", "waste_disposal", "LCOW", isolines=[1, 2], cmap="GnBu"
     )
+
     return global_results, m
 
 
