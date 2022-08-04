@@ -69,6 +69,8 @@ def main():
     display_design(m)
     display_state(m)
 
+    return m
+
 
 def build():
     # flowsheet set up
