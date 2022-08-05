@@ -162,7 +162,7 @@ def build():
 
     # increase the investment factor to account for not including pre/post treatment
     # this increases the capex/total investment cost
-    m.fs.costing.factor_total_investment.fix(3)
+    m.fs.costing.factor_total_investment.fix(12)
 
     return m
 

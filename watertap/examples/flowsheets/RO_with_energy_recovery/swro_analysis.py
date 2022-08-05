@@ -41,7 +41,7 @@ def run_analysis(case_num, nx, interpolate_nan_outputs):
         )
     elif case_num == 4:
         sweep_params["investment_factor"] = LinearSample(
-            m.fs.costing.factor_total_investment, 1, 4, 4
+            m.fs.costing.factor_total_investment, 2, 12, 6
         )
         sweep_params["electricity_price"] = LinearSample(
             m.fs.costing.electricity_cost, 0.0, 0.25, nx
