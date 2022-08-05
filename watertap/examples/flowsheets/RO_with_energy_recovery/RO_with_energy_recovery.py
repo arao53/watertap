@@ -160,6 +160,10 @@ def build():
     # calculate and propagate scaling factors
     iscale.calculate_scaling_factors(m)
 
+    # increase the investment factor to account for not including pre/post treatment
+    # this increases the capex/total investment cost
+    m.fs.costing.factor_total_investment.fix(3)
+
     return m
 
 
@@ -451,6 +455,11 @@ def display_system(m):
     )
     print("Levelized cost of water: %.2f $/m3" % value(m.fs.costing.LCOW))
 
+    baseline_daily_cost = m.fs.costing.total_investment_cost() / (
+        m.fs.costing.annual_water_production() / 365
+    )
+    print("Baseline daily cost: %.2f $/m3/day" % baseline_daily_cost)
+
 
 def display_design(m):
     print("---decision variables---")
@@ -504,4 +513,4 @@ def display_state(m):
 
 
 if __name__ == "__main__":
-    main()
+    m = main()

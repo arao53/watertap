@@ -57,41 +57,7 @@ def run_analysis(case_num=2, nx=20, interpolate_nan_outputs=False):
     return global_results, sweep_params, m
 
 
-def plot_results(global_results, sweep_params):
-    if len(sweep_params.keys()) == 2:
-        xlabel, ylabel = sweep_params.keys()
-        df = pd.DataFrame(global_results, columns=[xlabel, ylabel, "results"])
-        df = df.pivot(xlabel, ylabel, "results")
-        y = df.columns.values * 100  # convert to %
-        x = df.index.values
-        Z = df.values.T
-        X, Y = np.meshgrid(x, y)
-
-        fig, ax = plt.subplots()
-        cs = ax.contour(X, Y, Z, levels=20, cmap="YlGnBu_r")
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
-        ax.set_ylim(top=max(y))
-        ax.clabel(cs, inline=True, fontsize=10)
-        # cbar = fig.colorbar(cs)
-
-    elif len(sweep_params.keys()) == 1:
-        xlabel = sweep_params.keys()[0]
-        X = global_results[:, 0]
-        Y = global_results[:, 1]
-        fig, ax = plt.subplots()
-        ax.plot(X, Y)
-        ax.set_xlabel(xlabel)
-
-    else:
-        raise NotImplementedError(
-            "Plot types with >2 indep variables have not been implemented"
-        )
-
-    return fig, ax
-
-
-def main(case_num=1, nx=21, interpolate_nan_outputs=False):
+def main(case_num=1, nx=11, interpolate_nan_outputs=False):
     # when from the command line
     case_num = int(case_num)
     nx = int(nx)
@@ -124,4 +90,3 @@ def main(case_num=1, nx=21, interpolate_nan_outputs=False):
 
 if __name__ == "__main__":
     global_results, sweep_params, m = main(*sys.argv[1:])
-    fig, ax = plot_results(global_results, sweep_params)
