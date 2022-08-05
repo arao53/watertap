@@ -455,10 +455,12 @@ def display_system(m):
     )
     print("Levelized cost of water: %.2f $/m3" % value(m.fs.costing.LCOW))
 
-    baseline_daily_cost = m.fs.costing.total_investment_cost() / (
-        m.fs.costing.annual_water_production() / 365
+    baseline_cap = (
+        m.fs.costing.total_investment_cost()
+        * 365
+        / m.fs.costing.annual_water_production()
     )
-    print("Baseline daily cost: %.2f $/m3/day" % baseline_daily_cost)
+    print("Baseline daily cost: %.2f $/m3/day" % baseline_cap)
 
 
 def display_design(m):

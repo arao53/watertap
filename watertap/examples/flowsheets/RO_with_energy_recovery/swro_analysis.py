@@ -18,7 +18,7 @@ def set_up_sensitivity(m):
     return outputs, optimize_kwargs, opt_function
 
 
-def run_analysis(case_num=2, nx=20, interpolate_nan_outputs=False):
+def run_analysis(case_num, nx, interpolate_nan_outputs):
     m = swro.main()
 
     outputs, optimize_kwargs, opt_function = set_up_sensitivity(m)
@@ -39,6 +39,17 @@ def run_analysis(case_num=2, nx=20, interpolate_nan_outputs=False):
         sweep_params["electricity_price"] = LinearSample(
             m.fs.costing.electricity_base_cost, 0.01, 0.5, nx
         )
+    elif case_num == 4:
+        sweep_params["investment_factor"] = LinearSample(
+            m.fs.costing.factor_total_investment, 1, 4, 4
+        )
+        sweep_params["electricity_price"] = LinearSample(
+            m.fs.costing.electricity_cost, 0.0, 0.25, nx
+        )
+        sweep_params["utilization_factor"] = LinearSample(
+            m.fs.costing.utilization_factor, 0.5, 1, nx
+        )
+
     else:
         raise ValueError("case_num = %d not recognized." % (case_num))
 
@@ -57,7 +68,7 @@ def run_analysis(case_num=2, nx=20, interpolate_nan_outputs=False):
     return global_results, sweep_params, m
 
 
-def main(case_num=1, nx=11, interpolate_nan_outputs=False):
+def main(case_num=4, nx=2, interpolate_nan_outputs=False):
     # when from the command line
     case_num = int(case_num)
     nx = int(nx)
