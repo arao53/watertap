@@ -150,13 +150,26 @@ def bar_plot(
 
 if __name__ == "__main__":
     current_dir = os.getcwd()
-    file_of_interest = "RO_with_energy_recovery\\sensitivity_1.csv"
+    file_of_interest = "RO_with_energy_recovery\\sensitivity_2.csv"
     path = os.path.join(current_dir, file_of_interest)
-    fig, ax = line_plot(path, plot_type="contourf", levels=10)
-    ax.set_xlabel("Electricity price [$/kWh]")
-    ax.set_ylabel("Utilization factor [-]")
-    ax.set_title("LCOW [$/m3]")
 
+    # simple line plot
+    fig, ax = line_plot(
+        path,
+        plot_type="line_simple",
+    )
+    ax.set_ylabel("LCOW [$/m3]")
+
+    ax.set_xlabel("Electricity price [$/kWh]")
+    # ax.set_xlabel("Utilization factor [-]")
+
+    # contour plot
+    # fig, ax = line_plot(path, plot_type="contourf", levels=10)
+    # ax.set_xlabel("Electricity price [$/kWh]")
+    # ax.set_ylabel("Utilization factor [-]")
+    # ax.set_title("LCOW [$/m3]")
+
+    # multi line plot
     # fig, ax = line_plot(
     #     path,
     #     plot_type="line_multi",
@@ -170,6 +183,7 @@ if __name__ == "__main__":
     # # ax.set_xlabel("Electricity price [$/kWh]")
     # ax.set_xlabel("Utilization factor [-]")
 
+    # bar plot
     # fig, ax = bar_plot(
     #     path,
     #     plot_type="bar_floating",
