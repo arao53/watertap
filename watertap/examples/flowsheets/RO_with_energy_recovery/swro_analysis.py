@@ -14,6 +14,9 @@ def set_up_sensitivity(m):
 
     # create outputs
     outputs["LCOW"] = m.fs.costing.LCOW
+    outputs["permeate_flowrate"] = m.fs.product.properties[0].flow_vol_phase["Liq"]
+    outputs["recovery_rate"] = m.fs.RO.recovery_mass_phase_comp[0.0, "Liq", "H2O"]
+    outputs["pressure"] = m.fs.P1.control_volume.properties_out[0].pressure * 1e-5
 
     return outputs, optimize_kwargs, opt_function
 
@@ -65,7 +68,7 @@ def run_analysis(case_num, nx, interpolate_nan_outputs):
     return global_results, sweep_params, m
 
 
-def main(case_num=2, nx=5, interpolate_nan_outputs=False):
+def main(case_num=2, nx=11, interpolate_nan_outputs=False):
     # when from the command line
     case_num = int(case_num)
     nx = int(nx)

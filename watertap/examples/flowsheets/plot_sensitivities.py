@@ -16,7 +16,6 @@ def line_plot(
     iso_col=None,
     isolines=None,
 ):
-
     if plot_type == "contourf" or plot_type == "contour":
         df = pd.read_csv(path_to_results)
         column_names = df.columns.to_numpy()
@@ -51,12 +50,15 @@ def line_plot(
     elif plot_type == "line_simple":
         df = pd.read_csv(path_to_results)
         column_names = df.columns.to_numpy()
-
-        xlabel = column_names[0]
-        ylabel = column_names[1]
+        if x_col is None:
+            x_col = 0
+        if y_col is None:
+            y_col = 1
+        xlabel = column_names[x_col]
+        ylabel = column_names[y_col]
 
         x = df[xlabel].values
-        y = df[xlabel].values
+        y = df[ylabel].values
 
         fig, ax = plt.subplots()
         ax.plot(x, y)
@@ -154,11 +156,8 @@ if __name__ == "__main__":
     path = os.path.join(current_dir, file_of_interest)
 
     # simple line plot
-    fig, ax = line_plot(
-        path,
-        plot_type="line_simple",
-    )
-    ax.set_ylabel("LCOW [$/m3]")
+    fig, ax = line_plot(path, plot_type="line_simple", y_col=4)
+    ax.set_ylabel("Pressure [bar]")
 
     ax.set_xlabel("Electricity price [$/kWh]")
     # ax.set_xlabel("Utilization factor [-]")

@@ -391,31 +391,39 @@ def optimize_set_up(m):
     m.fs.P2.deltaP.setlb(0)
 
     # RO
-    m.fs.RO.area.setlb(1)
-    m.fs.RO.area.setub(150)
-
-    # additional specifications
-    m.fs.product_salinity = Param(
-        initialize=500e-6, mutable=True
-    )  # product NaCl mass fraction [-]
-    m.fs.minimum_water_flux = Param(
-        initialize=1.0 / 3600.0, mutable=True
-    )  # minimum water flux [kg/m2-s]
+    m.fs.RO.area.fix(115)
 
     # additional constraints
-    m.fs.eq_product_quality = Constraint(
-        expr=m.fs.product.properties[0].mass_frac_phase_comp["Liq", "NaCl"]
-        <= m.fs.product_salinity
-    )
-    iscale.constraint_scaling_transform(
-        m.fs.eq_product_quality, 1e3
-    )  # scaling constraint
-    m.fs.eq_minimum_water_flux = Constraint(
-        expr=m.fs.RO.flux_mass_phase_comp[0, 1, "Liq", "H2O"] >= m.fs.minimum_water_flux
-    )
+    m.fs.product.properties[0].mass_frac_phase_comp["Liq", "NaCl"].setub(0.05)
+    m.fs.RO.flux_mass_phase_comp[0, 1, "Liq", "H2O"].setlb(1 / 3600)
+
+    # # fix bep flowrate instead of flow ratio for pumps 1 and 2
+    # m.fs.P1.bep_flow.fix(m.ro_mp.fs.P1.bep_flow())
+    # m.fs.P1.flow_ratio[0].unfix()
+    #
+    # m.fs.P2.bep_flow.fix(m.ro_mp.fs.P2.bep_flow())
+    # m.fs.P2.flow_ratio[0].unfix()
+
+    # fix the mass fraction of nacl instead of the mass flow rate
+    mass_frac_nacl = m.fs.feed.properties[0.0].mass_frac_phase_comp["Liq", "NaCl"].value
+    m.fs.feed.properties[0].mass_frac_phase_comp["Liq", "NaCl"].fix(mass_frac_nacl)
+    m.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "NaCl"].unfix()
+
+    print("\nUnfixing operational variables...")
+
+    # unfix operational variables - water recovery and feed flow rate
+    m.fs.RO.recovery_mass_phase_comp[0, "Liq", "H2O"].unfix()
+    m.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].unfix()
+
+    # set variable bounds
+    m.fs.RO.recovery_mass_phase_comp[0, "Liq", "H2O"].setub(0.7)
+    m.fs.RO.recovery_mass_phase_comp[0, "Liq", "H2O"].setlb(0.3)
+
+    m.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].setub(1.5)
+    m.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].setlb(0.5)
 
     # ---checking model---
-    assert_degrees_of_freedom(m, 1)
+    # assert_degrees_of_freedom(m, 1)
 
 
 def optimize(m, solver=None, check_termination=True):
