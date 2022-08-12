@@ -419,8 +419,8 @@ def optimize_set_up(m):
     m.fs.RO.recovery_mass_phase_comp[0, "Liq", "H2O"].setub(0.7)
     m.fs.RO.recovery_mass_phase_comp[0, "Liq", "H2O"].setlb(0.3)
 
-    m.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].setub(1.5)
-    m.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].setlb(0.5)
+    m.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].setub(2.5)
+    m.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].setlb(0.0)
 
     # ---checking model---
     # assert_degrees_of_freedom(m, 1)

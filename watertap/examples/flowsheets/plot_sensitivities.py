@@ -55,15 +55,34 @@ def line_plot(
         if y_col is None:
             y_col = 1
         xlabel = column_names[x_col]
-        ylabel = column_names[y_col]
+        ylabel1 = column_names[1]
+        ylabel2 = column_names[2]
+        ylabel3 = column_names[3]
+        ylabel4 = column_names[4]
 
         x = df[xlabel].values
-        y = df[ylabel].values
+        y1 = df[ylabel1].values
+        y2 = df[ylabel2].values
+        y3 = df[ylabel3].values
+        y4 = df[ylabel4].values
 
-        fig, ax = plt.subplots()
-        ax.plot(x, y)
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
+        fig, ax = plt.subplots(2, 2)
+        fig.suptitle("Electricity price sensitivity")
+        ax[0, 0].plot(x, y1)
+        ax[0, 0].set_xlabel(xlabel)
+        ax[0, 0].set_ylabel(ylabel1 + "[$/m3]")
+
+        ax[0, 1].plot(x, y2 * 3600)
+        ax[0, 1].set_xlabel(xlabel)
+        ax[0, 1].set_ylabel(ylabel2 + "[m3/hr]")
+
+        ax[1, 0].plot(x, y3)
+        ax[1, 0].set_xlabel(xlabel)
+        ax[1, 0].set_ylabel(ylabel3 + "[-]")
+
+        ax[1, 1].plot(x, y4)
+        ax[1, 1].set_xlabel(xlabel)
+        ax[1, 1].set_ylabel(ylabel4 + "[bar]")
 
     elif plot_type == "line_multi":
         if x_col is None or isolines is None:
@@ -156,10 +175,10 @@ if __name__ == "__main__":
     path = os.path.join(current_dir, file_of_interest)
 
     # simple line plot
-    fig, ax = line_plot(path, plot_type="line_simple", y_col=4)
-    ax.set_ylabel("Pressure [bar]")
-
-    ax.set_xlabel("Electricity price [$/kWh]")
+    fig, ax = line_plot(path, plot_type="line_simple", y_col=3)
+    # ax.set_ylabel("Recovery [-]")
+    #
+    # ax.set_xlabel("Electricity price [$/kWh]")
     # ax.set_xlabel("Utilization factor [-]")
 
     # contour plot
