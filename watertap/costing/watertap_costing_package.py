@@ -538,6 +538,39 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
             ),
         )
 
+    def add_specific_carbon_intensity(
+        self, flow_rate, name="specific_carbon_intensity"
+    ):
+        """
+        Add specific carbon intensity (kgCO2eq/m**3) to costing block.
+        Args:
+            flow_rate - flow rate of water (volumetric) to be used in
+                        calculating specific energy consumption
+            name (optional) - the name of the Expression for the specific
+                              carbon intensity (default: specific_carbon_intensity)
+        """
+        if not hasattr(self, "carbon intensity"):
+            self.carbon_intensity = pyo.Param(
+                mutable=False,
+                default=0.1,
+                doc="Equivalent carbon emissions associated with electricity generation",
+                units=pyo.units.kg / pyo.units.kWh,
+            )
+        else:
+            pass
+
+        self.add_component(
+            name,
+            pyo.Expression(
+                expr=self.aggregate_flow_electricity
+                * self.carbon_intensity
+                / pyo.units.convert(
+                    flow_rate, to_units=pyo.units.m**3 / pyo.units.hr
+                ),
+                doc=f"Specific carbon intensity based on flow {flow_rate.name}",
+            ),
+        )
+
     # Define costing methods supported by package
 
     @staticmethod
