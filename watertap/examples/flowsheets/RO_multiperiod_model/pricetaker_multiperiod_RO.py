@@ -28,9 +28,11 @@ from watertap.examples.flowsheets.RO_multiperiod_model.multiperiod_RO import (
     create_multiperiod_swro_model,
 )
 
+from idaes.core.solvers import get_solver
+
 
 def main(
-    ndays=0.1,
+    ndays=1,
     filename="dagget_CA_LMP_hourly_2015.csv",
 ):
     file_path = os.path.realpath(__file__)
@@ -149,9 +151,10 @@ def set_objective(mp_swro, lmp, carbontax=3.5):
 
 def solve(m):
     # solve
-    opt = SolverFactory("ipopt")
+    # opt = SolverFactory("ipopt")
+    opt = get_solver()
     results = opt.solve(m, tee=True)
-
+    print("Solver:", opt.__class__)
     return m, results
 
 

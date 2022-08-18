@@ -82,15 +82,15 @@ def create_base_model():
     m.ro_mp.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].unfix()
 
     # set variable bounds
-    m.ro_mp.fs.RO.recovery_mass_phase_comp[0, "Liq", "H2O"].setub(max_recovery)
-    m.ro_mp.fs.RO.recovery_mass_phase_comp[0, "Liq", "H2O"].setlb(min_recovery)
+    # m.ro_mp.fs.RO.recovery_mass_phase_comp[0, "Liq", "H2O"].setub(max_recovery)
+    # m.ro_mp.fs.RO.recovery_mass_phase_comp[0, "Liq", "H2O"].setlb(min_recovery)
 
-    m.ro_mp.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].setub(
-        max_flowrate
-    )
-    m.ro_mp.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].setlb(
-        min_flowrate
-    )
+    # m.ro_mp.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].setub(
+    #     max_flowrate
+    # )
+    # m.ro_mp.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].setlb(
+    #     min_flowrate
+    # )
 
     return m
 
@@ -108,7 +108,7 @@ def create_swro_mp_block():
     # Add coupling variables
     b1.previous_pressure = Var(
         domain=NonNegativeReals,
-        units=pyunits.bar,
+        units=pyunits.Pa,
         bounds=(10e5, 80e5),
         doc="Applied pressure at the previous time step",
     )
