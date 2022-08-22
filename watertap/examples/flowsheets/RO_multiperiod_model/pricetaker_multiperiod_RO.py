@@ -24,6 +24,8 @@ from pyomo.environ import (
     Var,
 )
 
+from pyomo.util.check_units import assert_units_consistent
+
 from watertap.examples.flowsheets.RO_multiperiod_model.multiperiod_RO import (
     create_multiperiod_swro_model,
 )
@@ -48,6 +50,9 @@ def main(
 
     m, t_blocks = set_objective(mp_swro, data)
 
+    # TODO: uncomment after checking the results for lack of variability in flowrate/pressure
+    # , then resolve units error
+    # assert_units_consistent(m)
     m, _ = solve(m)
 
     return m, t_blocks, data
