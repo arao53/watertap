@@ -19,18 +19,26 @@ def contour_figure(
     df = pd.read_csv(path_to_results)
     column_names = df.columns.to_numpy()
     df = df.pivot(column_names[0], column_names[1], column_names[2])
-    y = df.columns.values
+    y = df.columns.values * 100
     x = df.index.values
     Z = df.values.T
     X, Y = np.meshgrid(x, y)
 
+    max_val = np.max(Z)
+
+    # norm_Z = 100*(1 - Z/max_val)
+    base = 0.5
+    norm_Z = 100 * (Z - base) / base
     fig, ax = plt.subplots()
 
     if plot_type == "contourf":
-        cs = ax.contourf(X, Y, Z, levels=levels, cmap="YlGnBu_r")
+        cs = ax.contourf(X, Y, norm_Z, levels=levels, cmap="YlGnBu_r", vmin=0, vmax=200)
         cbar = fig.colorbar(cs)
+        # cs = ax.contour(X, Y, norm_Z, levels=isolines, cmap="twilight")
+        # clbl = ax.clabel(cs)
+
     else:
-        cs = ax.contour(X, Y, Z, levels=levels, cmap="YlGnBu_r")
+        cs = ax.contour(X, Y, norm_Z, levels=levels, cmap="YlGnBu_r")
         clbl = ax.clabel(cs, colors="black")
 
     if xlabel is None:
@@ -41,8 +49,10 @@ def contour_figure(
         title = column_names[2]
 
     ax.set_xlabel("Electricity price [$/kWh]")
-    ax.set_ylabel("Utilization factor [-]")
-    ax.set_title("LCOW [$/m3]")
+    ax.set_ylabel("Utilization factor [%]")
+    ax.set_title("SWRO: LCOW Compared to baseline 0.5$/m3 [%]")
+    ax.text(0.195, 28, " LCOW >\n1.5$/m3", color="black", fontsize="large")
+    ax.text(0.008, 90, " LCOW <\n0.5$/m3", color="white", fontsize="large")
     ax.set_ylim(top=max(y))
     plt.show()
     return fig, ax
@@ -221,14 +231,16 @@ def bar_plot(path_to_results):
 
 if __name__ == "__main__":
     current_dir = os.getcwd()
-    file_of_interest = "RO_with_energy_recovery\\sensitivity_2.csv"
+    file_of_interest = "RO_with_energy_recovery\\sensitivity_1.csv"
     path = os.path.join(current_dir, file_of_interest)
 
     # # line sensitivities
     # fig, ax = line_sensitivities(path)
     #
-    # # contour plot
-    # fig1, ax1 = contour_figure(path, plot_type="contourf", levels=10)
+    # contour plot
+    fig1, ax1 = contour_figure(
+        path, plot_type="contourf", levels=48, isolines=[0, 100, 200]
+    )
     #
     #
     # # multi line plots
