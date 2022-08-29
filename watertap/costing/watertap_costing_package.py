@@ -36,6 +36,7 @@ from watertap.unit_models import (
     NanofiltrationZO,
     PressureExchanger,
     Crystallization,
+    Ultraviolet0D,
     Pump,
     EnergyRecoveryDevice,
     Electrodialysis0D,
@@ -87,7 +88,7 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
         self.base_period = pyo.units.year
 
         # Build flowsheet level costing components
-        # This is package specific
+        # These are the global parameters
         self.utilization_factor = pyo.Var(
             initialize=0.9,
             doc="Plant capacity utilization [fraction of uptime]",
@@ -108,71 +109,6 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
             doc="Capital annualization factor [fraction of investment cost/year]",
             units=pyo.units.year**-1,
         )
-        self.factor_membrane_replacement = pyo.Var(
-            initialize=0.2,
-            doc="Membrane replacement factor [fraction of membrane replaced/year]",
-            units=pyo.units.year**-1,
-        )
-        self.reverse_osmosis_membrane_cost = pyo.Var(
-            initialize=30,
-            doc="Membrane cost",
-            units=self.base_currency / (pyo.units.meter**2),
-        )
-        self.reverse_osmosis_high_pressure_membrane_cost = pyo.Var(
-            initialize=75,
-            doc="Membrane cost",
-            units=self.base_currency / (pyo.units.meter**2),
-        )
-        self.nanofiltration_membrane_cost = pyo.Var(
-            initialize=15,
-            doc="Membrane cost",
-            units=self.base_currency / (pyo.units.meter**2),
-        )
-        self.high_pressure_pump_cost = pyo.Var(
-            initialize=53 / 1e5 * 3600,
-            doc="High pressure pump cost",
-            units=self.base_currency / pyo.units.watt,
-        )
-        self.low_pressure_pump_cost = pyo.Var(
-            initialize=889,
-            doc="Low pressure pump cost",
-            units=self.base_currency / (pyo.units.liter / pyo.units.second),
-        )
-        self.erd_pressure_exchanger_cost = pyo.Var(
-            initialize=535,
-            doc="Pressure exchanger cost",
-            units=self.base_currency / (pyo.units.meter**3 / pyo.units.hours),
-        )
-        self.pressure_exchanger_cost = pyo.Var(
-            initialize=535,
-            doc="Pressure exchanger cost",
-            units=self.base_currency / (pyo.units.meter**3 / pyo.units.hours),
-        )
-        self.energy_recovery_device_linear_coefficient = pyo.Var(
-            initialize=3134.7,
-            doc="Energy recovery device linear coefficient",
-            units=self.base_currency,
-        )
-        self.energy_recovery_device_exponent = pyo.Var(
-            initialize=0.58,
-            doc="Energy recovery device exponent",
-            units=pyo.units.dimensionless,
-        )
-        self.mixer_unit_cost = pyo.Var(
-            initialize=361,
-            doc="Mixer cost",
-            units=self.base_currency / (pyo.units.liters / pyo.units.second),
-        )
-        self.naocl_mixer_unit_cost = pyo.Var(
-            initialize=5.08,
-            doc="NaOCl mixer cost",
-            units=self.base_currency / (pyo.units.m**3 / pyo.units.day),
-        )
-        self.caoh2_mixer_unit_cost = pyo.Var(
-            initialize=792.8 * 2.20462,
-            doc="Ca(OH)2 mixer cost",
-            units=self.base_currency / (pyo.units.kg / pyo.units.day),
-        )
 
         self.electricity_base_cost = pyo.Param(
             mutable=True,
@@ -180,94 +116,285 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
             doc="Electricity cost",
             units=self.base_currency / pyo.units.kWh,
         )
-        self.naocl_cost = pyo.Param(
-            initialize=0.23, doc="NaOCl cost", units=self.base_currency / pyo.units.kg
-        )
-        self.naocl_purity = pyo.Param(
+
+        self.electrical_carbon_intensity = pyo.Param(
             mutable=True,
-            initialize=0.15,
-            doc="NaOCl purity",
-            units=pyo.units.dimensionless,
-        )
-        self.caoh2_cost = pyo.Param(
-            mutable=True,
-            initialize=0.12,
-            doc="CaOH2 cost",
-            units=self.base_currency / pyo.units.kg,
-        )
-        self.caoh2_purity = pyo.Param(
-            mutable=True,
-            initialize=1,
-            doc="CaOH2 purity",
-            units=pyo.units.dimensionless,
+            initialize=0.475,
+            doc="Grid carbon intensity [kgCO2_eq/kWh]",
+            units=pyo.units.kg / pyo.units.kWh,
         )
 
-        self.electrodialysis_cem_membrane_cost = pyo.Var(
-            initialize=43,
-            doc="Cost of CEM membrane used in Electrodialysis ($/CEM/area)",
-            units=self.base_currency / (pyo.units.meter**2),
-        )
-        self.electrodialysis_aem_membrane_cost = pyo.Var(
-            initialize=43,
-            doc="Cost of AEM membrane used in Electrodialysis ($/AEM/area)",
-            units=self.base_currency / (pyo.units.meter**2),
-        )
-        self.electrodialysis_flowspacer_cost = pyo.Var(
-            initialize=3,
-            doc="Cost of the spacers used in Electrodialysis ($/spacer/area)",
-            units=self.base_currency / (pyo.units.meter**2),
-        )
-        self.factor_electrodialysis_membrane_housing_replacement = pyo.Var(
-            initialize=0.2,
-            doc="Membrane housing replacement factor for CEM, AEM, and spacer replacements [fraction of membrane replaced/year]",
-            units=pyo.units.year**-1,
-        )
-        self.electrodialysis_electrode_cost = pyo.Var(
-            initialize=2000,
-            doc="Cost of the electrodes used in Electrodialysis ($/electrode/area)",
-            units=self.base_currency / (pyo.units.meter**2),
-        )
-        self.factor_electrodialysis_electrode_replacement = pyo.Var(
-            initialize=0.02,
-            doc="Electrode replacements [fraction of electrode replaced/year]",
-            units=pyo.units.year**-1,
+        def build_reverse_osmosis_cost_param_block(blk):
+
+            costing = blk.parent_block()
+
+            blk.factor_membrane_replacement = pyo.Var(
+                initialize=0.2,
+                doc="Membrane replacement factor [fraction of membrane replaced/year]",
+                units=pyo.units.year**-1,
+            )
+            blk.membrane_cost = pyo.Var(
+                initialize=30,
+                doc="Membrane cost",
+                units=costing.base_currency / (pyo.units.meter**2),
+            )
+            blk.high_pressure_membrane_cost = pyo.Var(
+                initialize=75,
+                doc="Membrane cost",
+                units=costing.base_currency / (pyo.units.meter**2),
+            )
+
+        self.reverse_osmosis = pyo.Block(rule=build_reverse_osmosis_cost_param_block)
+
+        def build_nanofiltration_cost_param_block(blk):
+
+            costing = blk.parent_block()
+
+            blk.factor_membrane_replacement = pyo.Var(
+                initialize=0.2,
+                doc="Membrane replacement factor [fraction of membrane replaced/year]",
+                units=pyo.units.year**-1,
+            )
+            blk.membrane_cost = pyo.Var(
+                initialize=15,
+                doc="Membrane cost",
+                units=costing.base_currency / (pyo.units.meter**2),
+            )
+
+        self.nanofiltration = pyo.Block(rule=build_nanofiltration_cost_param_block)
+
+        def build_uv_cost_param_block(blk):
+
+            costing = blk.parent_block()
+
+            blk.factor_lamp_replacement = pyo.Var(
+                initialize=0.33278,
+                doc="UV replacement factor accounting for lamps, sleeves, ballasts and sensors [fraction of uv replaced/year]",
+                units=pyo.units.year**-1,
+            )
+            blk.reactor_cost = pyo.Var(
+                initialize=202.346,
+                doc="UV reactor cost",
+                units=costing.base_currency / (pyo.units.m**3 / pyo.units.hr),
+            )
+            blk.lamp_cost = pyo.Var(
+                initialize=235.5,
+                doc="UV lamps, sleeves, ballasts and sensors cost",
+                units=costing.base_currency / pyo.units.kW,
+            )
+
+        self.ultraviolet = pyo.Block(rule=build_uv_cost_param_block)
+
+        def build_high_pressure_pump_cost_param_block(blk):
+
+            costing = blk.parent_block()
+
+            blk.cost = pyo.Var(
+                initialize=53 / 1e5 * 3600,
+                doc="High pressure pump cost",
+                units=costing.base_currency / pyo.units.watt,
+            )
+
+        self.high_pressure_pump = pyo.Block(
+            rule=build_high_pressure_pump_cost_param_block
         )
 
-        self.fc_crystallizer_fob_unit_cost = pyo.Var(
-            initialize=675000,
-            doc="Forced circulation crystallizer reference free-on-board cost (Woods, 2007)",
-            units=pyo.units.USD_2007,
+        def build_low_pressure_pump_cost_param_block(blk):
+
+            costing = blk.parent_block()
+
+            blk.cost = pyo.Var(
+                initialize=889,
+                doc="Low pressure pump cost",
+                units=costing.base_currency / (pyo.units.liter / pyo.units.second),
+            )
+
+        self.low_pressure_pump = pyo.Block(
+            rule=build_low_pressure_pump_cost_param_block
         )
 
-        self.fc_crystallizer_ref_capacity = pyo.Var(
-            initialize=1,
-            doc="Forced circulation crystallizer reference crystal capacity (Woods, 2007)",
-            units=pyo.units.kg / pyo.units.s,
+        def build_energy_recovery_device_cost_param_block(blk):
+
+            costing = blk.parent_block()
+
+            blk.pressure_exchanger_cost = pyo.Var(
+                initialize=535,
+                doc="Pressure exchanger cost",
+                units=costing.base_currency / (pyo.units.meter**3 / pyo.units.hours),
+            )
+
+        self.energy_recovery_device = pyo.Block(
+            rule=build_energy_recovery_device_cost_param_block
         )
 
-        self.fc_crystallizer_ref_exponent = pyo.Var(
-            initialize=0.53,
-            doc="Forced circulation crystallizer cost exponent factor (Woods, 2007)",
-            units=pyo.units.dimensionless,
+        def build_pressure_exchanger_cost_param_block(blk):
+
+            costing = blk.parent_block()
+
+            blk.cost = pyo.Var(
+                initialize=535,
+                doc="Pressure exchanger cost",
+                units=costing.base_currency / (pyo.units.meter**3 / pyo.units.hours),
+            )
+
+        self.pressure_exchanger = pyo.Block(
+            rule=build_pressure_exchanger_cost_param_block
         )
 
-        self.fc_crystallizer_iec_percent = pyo.Var(
-            initialize=1.43,
-            doc="Forced circulation crystallizer installed equipment cost (Diab and Gerogiorgis, 2017)",
-            units=pyo.units.dimensionless,
-        )
+        def build_mixer_cost_param_block(blk):
 
-        self.fc_crystallizer_volume_cost = pyo.Var(
-            initialize=16320,
-            doc="Forced circulation crystallizer cost per volume (Yusuf et al., 2019)",
-            units=pyo.units.USD_2007,  ## TODO: Needs confirmation, but data is from Perry apparently
-        )
+            costing = blk.parent_block()
 
-        self.fc_crystallizer_vol_basis_exponent = pyo.Var(
-            initialize=0.47,
-            doc="Forced circulation crystallizer volume-based cost exponent (Yusuf et al., 2019)",
-            units=pyo.units.dimensionless,
-        )
+            blk.unit_cost = pyo.Var(
+                initialize=361,
+                doc="Mixer cost",
+                units=costing.base_currency / (pyo.units.liters / pyo.units.second),
+            )
+
+        self.mixer = pyo.Block(rule=build_mixer_cost_param_block)
+
+        def build_naocl_cost_param_block(blk):
+
+            costing = blk.parent_block()
+
+            blk.mixer_unit_cost = pyo.Var(
+                initialize=5.08,
+                doc="NaOCl mixer cost",
+                units=costing.base_currency / (pyo.units.m**3 / pyo.units.day),
+            )
+            blk.cost = pyo.Param(
+                initialize=0.23,
+                doc="NaOCl cost",
+                units=costing.base_currency / pyo.units.kg,
+            )
+            blk.purity = pyo.Param(
+                mutable=True,
+                initialize=0.15,
+                doc="NaOCl purity",
+                units=pyo.units.dimensionless,
+            )
+
+        self.naocl = pyo.Block(rule=build_naocl_cost_param_block)
+
+        def build_caoh2_cost_param_block(blk):
+
+            costing = blk.parent_block()
+
+            blk.mixer_unit_cost = pyo.Var(
+                initialize=792.8 * 2.20462,
+                doc="Ca(OH)2 mixer cost",
+                units=costing.base_currency / (pyo.units.kg / pyo.units.day),
+            )
+            blk.cost = pyo.Param(
+                mutable=True,
+                initialize=0.12,
+                doc="CaOH2 cost",
+                units=costing.base_currency / pyo.units.kg,
+            )
+            blk.purity = pyo.Param(
+                mutable=True,
+                initialize=1,
+                doc="CaOH2 purity",
+                units=pyo.units.dimensionless,
+            )
+
+        self.caoh2 = pyo.Block(rule=build_caoh2_cost_param_block)
+
+        def build_electrodialysis_cost_param_block(blk):
+
+            costing = blk.parent_block()
+
+            blk.cem_membrane_cost = pyo.Var(
+                initialize=43,
+                doc="Cost of CEM membrane used in Electrodialysis ($/CEM/area)",
+                units=costing.base_currency / (pyo.units.meter**2),
+            )
+            blk.aem_membrane_cost = pyo.Var(
+                initialize=43,
+                doc="Cost of AEM membrane used in Electrodialysis ($/AEM/area)",
+                units=costing.base_currency / (pyo.units.meter**2),
+            )
+            blk.flowspacer_cost = pyo.Var(
+                initialize=3,
+                doc="Cost of the spacers used in Electrodialysis ($/spacer/area)",
+                units=costing.base_currency / (pyo.units.meter**2),
+            )
+            blk.factor_membrane_housing_replacement = pyo.Var(
+                initialize=0.2,
+                doc="Membrane housing replacement factor for CEM, AEM, and spacer replacements [fraction of membrane replaced/year]",
+                units=pyo.units.year**-1,
+            )
+            blk.electrode_cost = pyo.Var(
+                initialize=2000,
+                doc="Cost of the electrodes used in Electrodialysis ($/electrode/area)",
+                units=costing.base_currency / (pyo.units.meter**2),
+            )
+            blk.factor_electrode_replacement = pyo.Var(
+                initialize=0.02,
+                doc="Electrode replacements [fraction of electrode replaced/year]",
+                units=pyo.units.year**-1,
+            )
+
+        self.electrodialysis = pyo.Block(rule=build_electrodialysis_cost_param_block)
+
+        def build_crystallizer_cost_param_block(blk):
+
+            blk.steam_pressure = pyo.Var(
+                initialize=3,
+                units=pyo.units.bar,
+                doc="Steam pressure (gauge) for crystallizer heating: 3 bar default based on Dutta example",
+            )
+
+            blk.efficiency_pump = pyo.Var(
+                initialize=0.7,
+                units=pyo.units.dimensionless,
+                doc="Crystallizer pump efficiency - assumed",
+            )
+
+            blk.pump_head_height = pyo.Var(
+                initialize=1,
+                units=pyo.units.m,
+                doc="Crystallizer pump head height -  assumed, unvalidated",
+            )
+
+            # Crystallizer operating cost information from literature
+            blk.fob_unit_cost = pyo.Var(
+                initialize=675000,
+                doc="Forced circulation crystallizer reference free-on-board cost (Woods, 2007)",
+                units=pyo.units.USD_2007,
+            )
+
+            blk.ref_capacity = pyo.Var(
+                initialize=1,
+                doc="Forced circulation crystallizer reference crystal capacity (Woods, 2007)",
+                units=pyo.units.kg / pyo.units.s,
+            )
+
+            blk.ref_exponent = pyo.Var(
+                initialize=0.53,
+                doc="Forced circulation crystallizer cost exponent factor (Woods, 2007)",
+                units=pyo.units.dimensionless,
+            )
+
+            blk.iec_percent = pyo.Var(
+                initialize=1.43,
+                doc="Forced circulation crystallizer installed equipment cost (Diab and Gerogiorgis, 2017)",
+                units=pyo.units.dimensionless,
+            )
+
+            blk.volume_cost = pyo.Var(
+                initialize=16320,
+                doc="Forced circulation crystallizer cost per volume (Yusuf et al., 2019)",
+                units=pyo.units.USD_2007,  ## TODO: Needs confirmation, but data is from Perry apparently
+            )
+
+            blk.vol_basis_exponent = pyo.Var(
+                initialize=0.47,
+                doc="Forced circulation crystallizer volume-based cost exponent (Yusuf et al., 2019)",
+                units=pyo.units.dimensionless,
+            )
+
+        self.crystallizer = pyo.Block(rule=build_crystallizer_cost_param_block)
 
         # Crystallizer operating cost information from literature
         self.steam_unit_cost = pyo.Var(
@@ -276,117 +403,103 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
             doc="Steam cost, Panagopoulos (2019)",
         )
 
-        self.crystallizer_steam_pressure = pyo.Var(
-            initialize=3,
-            units=pyo.units.bar,
-            doc="Steam pressure (gauge) for crystallizer heating: 3 bar default based on Dutta example",
-        )
+        def build_gac_cost_param_block(blk):
 
-        self.crystallizer_efficiency_pump = pyo.Var(
-            initialize=0.7,
-            units=pyo.units.dimensionless,
-            doc="Crystallizer pump efficiency - assumed",
-        )
+            blk.num_contactors_op = pyo.Var(
+                initialize=1,
+                units=pyo.units.dimensionless,
+                doc="Number of GAC contactors in operation in parallel",
+            )
 
-        self.crystallizer_pump_head_height = pyo.Var(
-            initialize=1,
-            units=pyo.units.m,
-            doc="Crystallizer pump head height -  assumed, unvalidated",
-        )
+            blk.num_contactors_redundant = pyo.Var(
+                initialize=1,
+                units=pyo.units.dimensionless,
+                doc="Number of off-line redundant GAC contactors in parallel",
+            )
 
-        self.gac_num_contactors_op = pyo.Var(
-            initialize=1,
-            units=pyo.units.dimensionless,
-            doc="Number of GAC contactors in operation in parallel",
-        )
+            blk.contactor_cost_coeff_0 = pyo.Var(
+                initialize=10010.9,
+                units=pyo.units.USD_2020,
+                doc="GAC contactor polynomial cost coefficient 0",
+            )
 
-        self.gac_num_contactors_redundant = pyo.Var(
-            initialize=1,
-            units=pyo.units.dimensionless,
-            doc="Number of off-line redundant GAC contactors in parallel",
-        )
+            blk.contactor_cost_coeff_1 = pyo.Var(
+                initialize=2204.95,
+                units=pyo.units.USD_2020 * (pyo.units.m**3) ** -1,
+                doc="GAC contactor polynomial cost coefficient 1",
+            )
 
-        self.gac_contactor_cost_coeff_0 = pyo.Var(
-            initialize=10010.9,
-            units=pyo.units.USD_2020,
-            doc="GAC contactor polynomial cost coefficient 0",
-        )
+            blk.contactor_cost_coeff_2 = pyo.Var(
+                initialize=-15.9378,
+                units=pyo.units.USD_2020 * (pyo.units.m**3) ** -2,
+                doc="GAC contactor polynomial cost coefficient 2",
+            )
 
-        self.gac_contactor_cost_coeff_1 = pyo.Var(
-            initialize=2204.95,
-            units=pyo.units.USD_2020 * (pyo.units.m**3) ** -1,
-            doc="GAC contactor polynomial cost coefficient 1",
-        )
+            blk.contactor_cost_coeff_3 = pyo.Var(
+                initialize=0.110592,
+                units=pyo.units.USD_2020 * (pyo.units.m**3) ** -3,
+                doc="GAC contactor polynomial cost coefficient 3",
+            )
 
-        self.gac_contactor_cost_coeff_2 = pyo.Var(
-            initialize=-15.9378,
-            units=pyo.units.USD_2020 * (pyo.units.m**3) ** -2,
-            doc="GAC contactor polynomial cost coefficient 2",
-        )
+            blk.bed_mass_max_ref = pyo.Var(
+                initialize=18143.7,
+                units=pyo.units.kg,
+                doc="Reference maximum value of GAC mass needed for initial charge where "
+                "economy of scale no longer discounts the unit price",
+            )
 
-        self.gac_contactor_cost_coeff_3 = pyo.Var(
-            initialize=0.110592,
-            units=pyo.units.USD_2020 * (pyo.units.m**3) ** -3,
-            doc="GAC contactor polynomial cost coefficient 3",
-        )
+            blk.adsorbent_unit_cost_coeff = pyo.Var(
+                initialize=4.58342,
+                units=pyo.units.USD_2020 * pyo.units.kg**-1,
+                doc="GAC adsorbent exponential cost pre-exponential coefficient",
+            )
 
-        self.bed_mass_gac_max_ref = pyo.Var(
-            initialize=18143.7,
-            units=pyo.units.kg,
-            doc="Reference maximum value of GAC mass needed for initial charge where "
-            "economy of scale no longer discounts the unit price",
-        )
+            blk.adsorbent_unit_cost_exp_coeff = pyo.Var(
+                initialize=-1.25311e-5,
+                units=pyo.units.kg**-1,
+                doc="GAC adsorbent exponential cost parameter coefficient",
+            )
 
-        self.gac_adsorbent_unit_cost_coeff = pyo.Var(
-            initialize=4.58342,
-            units=pyo.units.USD_2020 * pyo.units.kg**-1,
-            doc="GAC adsorbent exponential cost pre-exponential coefficient",
-        )
+            blk.other_cost_coeff = pyo.Var(
+                initialize=16660.7,
+                units=pyo.units.USD_2020,
+                doc="GAC other cost power law coefficient",
+            )
 
-        self.gac_adsorbent_unit_cost_exp_coeff = pyo.Var(
-            initialize=-1.25311e-5,
-            units=pyo.units.kg**-1,
-            doc="GAC adsorbent exponential cost parameter coefficient",
-        )
+            blk.other_cost_exp = pyo.Var(
+                initialize=0.552207,
+                units=pyo.units.dimensionless,
+                doc="GAC other cost power law exponent",
+            )
 
-        self.gac_other_cost_coeff = pyo.Var(
-            initialize=16660.7,
-            units=pyo.units.USD_2020,
-            doc="GAC other cost power law coefficient",
-        )
+            blk.regen_frac = pyo.Var(
+                initialize=0.70,
+                units=pyo.units.dimensionless,
+                doc="Fraction of spent GAC adsorbent that can be regenerated for reuse",
+            )
 
-        self.gac_other_cost_exp = pyo.Var(
-            initialize=0.552207,
-            units=pyo.units.dimensionless,
-            doc="GAC other cost power law exponent",
-        )
+            blk.regen_unit_cost = pyo.Var(
+                initialize=4.28352,
+                units=pyo.units.USD_2020 * pyo.units.kg**-1,
+                doc="Unit cost to regenerate spent GAC adsorbent by an offsite regeneration facility",
+            )
 
-        self.gac_regen_frac = pyo.Var(
-            initialize=0.70,
-            units=pyo.units.dimensionless,
-            doc="Fraction of spent GAC adsorbent that can be regenerated for reuse",
-        )
+            blk.makeup_unit_cost = pyo.Var(
+                initialize=4.58223,
+                units=pyo.units.USD_2020 * pyo.units.kg**-1,
+                doc="Unit cost to makeup spent GAC adsorbent with fresh adsorbent",
+            )
 
-        self.gac_regen_unit_cost = pyo.Var(
-            initialize=4.28352,
-            units=pyo.units.USD_2020 * pyo.units.kg**-1,
-            doc="Unit cost to regenerate spent GAC adsorbent by an offsite regeneration facility",
-        )
-
-        self.gac_makeup_unit_cost = pyo.Var(
-            initialize=4.58223,
-            units=pyo.units.USD_2020 * pyo.units.kg**-1,
-            doc="Unit cost to makeup spent GAC adsorbent with fresh adsorbent",
-        )
+        self.gac = pyo.Block(rule=build_gac_cost_param_block)
 
         # fix the parameters
-        for var in self.component_objects(pyo.Var):
+        for var in self.component_objects(pyo.Var, descend_into=True):
             var.fix()
 
         # Define standard material flows and costs
         self.defined_flows["electricity"] = self.electricity_base_cost
-        self.defined_flows["NaOCl"] = self.naocl_cost / self.naocl_purity
-        self.defined_flows["CaOH2"] = self.caoh2_cost / self.caoh2_purity
+        self.defined_flows["NaOCl"] = self.naocl.cost / self.naocl.purity
+        self.defined_flows["CaOH2"] = self.caoh2.cost / self.caoh2.purity
         self.defined_flows["steam"] = self.steam_unit_cost
 
     def build_process_costs(self):
@@ -522,7 +635,54 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
             ),
         )
 
+    def add_specific_electrical_carbon_intensity(
+        self, flow_rate, name="specific_electrical_carbon_intensity"
+    ):
+        """
+        Add specific electrical carbon intensity (kg_CO2eq/m**3) to costing block.
+        Args:
+            flow_rate - flow rate of water (volumetric) to be used in
+                        calculating specific electrical carbon intensity
+            name (optional) - the name of the Expression for the specific
+                              energy consumption (default: specific_electrical_carbon_intensity)
+        """
+
+        self.add_component(
+            name,
+            pyo.Expression(
+                expr=self.aggregate_flow_electricity
+                * self.electrical_carbon_intensity
+                / pyo.units.convert(
+                    flow_rate, to_units=pyo.units.m**3 / pyo.units.hr
+                ),
+                doc=f"Specific electrical carbon intensity based on flow {flow_rate.name}",
+            ),
+        )
+
     # Define costing methods supported by package
+
+    @staticmethod
+    def cost_uv_aop(blk, cost_electricity_flow=True):
+        """
+        UV-AOP costing method
+        """
+        cost_uv_aop_bundle(
+            blk,
+            blk.costing_package.ultraviolet.reactor_cost,
+            blk.costing_package.ultraviolet.lamp_cost,
+            blk.costing_package.ultraviolet.factor_lamp_replacement,
+        )
+
+        t0 = blk.flowsheet().time.first()
+        if cost_electricity_flow:
+            blk.costing_package.cost_flow(
+                pyo.units.convert(
+                    blk.unit_model.electricity_demand[t0],
+                    to_units=pyo.units.kW,
+                ),
+                "electricity",
+            )
+
     @staticmethod
     def cost_nanofiltration(blk):
         """
@@ -532,8 +692,8 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
         """
         cost_membrane(
             blk,
-            blk.costing_package.nanofiltration_membrane_cost,
-            blk.costing_package.factor_membrane_replacement,
+            blk.costing_package.nanofiltration.membrane_cost,
+            blk.costing_package.nanofiltration.factor_membrane_replacement,
         )
 
     @staticmethod
@@ -548,10 +708,10 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
                 default = ROType.standard
         """
         if ro_type == ROType.standard:
-            membrane_cost = blk.costing_package.reverse_osmosis_membrane_cost
+            membrane_cost = blk.costing_package.reverse_osmosis.membrane_cost
         elif ro_type == ROType.high_pressure:
             membrane_cost = (
-                blk.costing_package.reverse_osmosis_high_pressure_membrane_cost
+                blk.costing_package.reverse_osmosis.high_pressure_membrane_cost
             )
         else:
             raise ConfigurationError(
@@ -559,7 +719,9 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
                 f" {ro_type}. Argument must be a member of the ROType Enum."
             )
         cost_membrane(
-            blk, membrane_cost, blk.costing_package.factor_membrane_replacement
+            blk,
+            membrane_cost,
+            blk.costing_package.reverse_osmosis.factor_membrane_replacement,
         )
 
     @staticmethod
@@ -628,7 +790,7 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
         make_capital_cost_var(blk)
         blk.capital_cost_constraint = pyo.Constraint(
             expr=blk.capital_cost
-            == blk.costing_package.high_pressure_pump_cost
+            == blk.costing_package.high_pressure_pump.cost
             * pyo.units.convert(blk.unit_model.work_mechanical[t0], pyo.units.W)
         )
         if cost_electricity_flow:
@@ -654,7 +816,7 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
         t0 = blk.flowsheet().time.first()
         cost_by_flow_volume(
             blk,
-            blk.costing_package.low_pressure_pump_cost,
+            blk.costing_package.low_pressure_pump.cost,
             pyo.units.convert(
                 blk.unit_model.control_volume.properties_in[t0].flow_vol,
                 (pyo.units.m**3 / pyo.units.s),
@@ -683,7 +845,7 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
         t0 = blk.flowsheet().time.first()
         cost_by_flow_volume(
             blk,
-            blk.costing_package.erd_pressure_exchanger_cost,
+            blk.costing_package.energy_recovery_device.pressure_exchanger_cost,
             pyo.units.convert(
                 blk.unit_model.control_volume.properties_in[t0].flow_vol,
                 (pyo.units.meter**3 / pyo.units.hours),
@@ -706,7 +868,7 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
         """
         cost_by_flow_volume(
             blk,
-            blk.costing_package.pressure_exchanger_cost,
+            blk.costing_package.pressure_exchanger.cost,
             pyo.units.convert(
                 blk.unit_model.low_pressure_side.properties_in[0].flow_vol,
                 (pyo.units.meter**3 / pyo.units.hours),
@@ -749,7 +911,7 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
         """
         cost_by_flow_volume(
             blk,
-            blk.costing_package.mixer_unit_cost,
+            blk.costing_package.mixer.unit_cost,
             pyo.units.convert(
                 blk.unit_model.mixed_state[0].flow_vol,
                 pyo.units.liter / pyo.units.second,
@@ -768,7 +930,7 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
         """
         cost_by_flow_volume(
             blk,
-            blk.costing_package.naocl_mixer_unit_cost,
+            blk.costing_package.naocl.mixer_unit_cost,
             pyo.units.convert(
                 blk.unit_model.inlet_stream_state[0].flow_vol,
                 pyo.units.m**3 / pyo.units.day,
@@ -797,7 +959,7 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
         )
         cost_by_flow_volume(
             blk,
-            blk.costing_package.caoh2_mixer_unit_cost
+            blk.costing_package.caoh2.mixer_unit_cost
             / blk.costing_package.factor_total_investment,
             blk.lime_kg_per_day,
         )
@@ -816,23 +978,23 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
         t0 = blk.flowsheet().time.first()
 
         membrane_cost = (
-            blk.costing_package.electrodialysis_cem_membrane_cost
-            + blk.costing_package.electrodialysis_aem_membrane_cost
+            blk.costing_package.electrodialysis.cem_membrane_cost
+            + blk.costing_package.electrodialysis.aem_membrane_cost
         )
-        spacer_cost = 2.0 * blk.costing_package.electrodialysis_flowspacer_cost
-        electrode_cost = 2.0 * blk.costing_package.electrodialysis_electrode_cost
+        spacer_cost = 2.0 * blk.costing_package.electrodialysis.flowspacer_cost
+        electrode_cost = 2.0 * blk.costing_package.electrodialysis.electrode_cost
 
         cost_electrodialysis_stack(
             blk,
             membrane_cost,
             spacer_cost,
-            blk.costing_package.factor_electrodialysis_membrane_housing_replacement,
+            blk.costing_package.electrodialysis.factor_membrane_housing_replacement,
             electrode_cost,
-            blk.costing_package.factor_electrodialysis_electrode_replacement,
+            blk.costing_package.electrodialysis.factor_electrode_replacement,
         )
 
         # Changed this to grab power from performance table which is identified
-        #   by same key regardless of whether the Electrodialysis unit is 0D or 1D
+        # by same key regardless of whether the Electrodialysis unit is 0D or 1D
         if cost_electricity_flow:
             blk.costing_package.cost_flow(
                 pyo.units.convert(
@@ -870,8 +1032,8 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
                     blk.unit_model.magma_circulation_flow_vol
                     * blk.unit_model.dens_mass_slurry
                     * Constants.acceleration_gravity
-                    * blk.costing_package.crystallizer_pump_head_height
-                    / blk.costing_package.crystallizer_efficiency_pump
+                    * blk.costing_package.crystallizer.pump_head_height
+                    / blk.costing_package.crystallizer.efficiency_pump
                 ),
                 to_units=pyo.units.kW,
             ),
@@ -899,16 +1061,16 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
             expr=blk.capital_cost
             == pyo.units.convert(
                 (
-                    blk.costing_package.fc_crystallizer_iec_percent
-                    * blk.costing_package.fc_crystallizer_fob_unit_cost
+                    blk.costing_package.crystallizer.iec_percent
+                    * blk.costing_package.crystallizer.fob_unit_cost
                     * (
                         sum(
                             blk.unit_model.solids.flow_mass_phase_comp[0, "Sol", j]
                             for j in blk.unit_model.config.property_package.solute_set
                         )
-                        / blk.costing_package.fc_crystallizer_ref_capacity
+                        / blk.costing_package.crystallizer.ref_capacity
                     )
-                    ** blk.costing_package.fc_crystallizer_ref_exponent
+                    ** blk.costing_package.crystallizer.ref_exponent
                 ),
                 to_units=blk.costing_package.base_currency,
             )
@@ -924,7 +1086,7 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
             expr=blk.capital_cost
             == pyo.units.convert(
                 (
-                    blk.costing_package.fc_crystallizer_volume_cost
+                    blk.costing_package.crystallizer.volume_cost
                     * (
                         (
                             pyo.units.convert(
@@ -938,7 +1100,7 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
                         )
                         / pyo.units.ft**3
                     )
-                    ** blk.costing_package.fc_crystallizer_vol_basis_exponent
+                    ** blk.costing_package.crystallizer.vol_basis_exponent
                 ),
                 to_units=blk.costing_package.base_currency,
             )
@@ -947,12 +1109,12 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
     @staticmethod
     def cost_gac(blk):
         """
-        3 equation capital cost estimation for GAC
-            contactor/pressure vessel cost by polynomial with single contactor volume
-            initial charge of GAC adsorbent cost by exponential with GAC mass
-            other process costs calculated power law with total contactor volume
-        Capital costs calculated using required makeup and regenerated GAC adsorbent
-            Energy for backwash and booster pumps considered negligible compared to regeneration costs
+        3 equation capital cost estimation for GAC systems with: (i), contactor/pressure vessel cost by polynomial
+        as a function of individual contactor volume; (ii), initial charge of GAC adsorbent cost by exponential as a
+        function of required mass of GAC adsorbent; and (iii), other process costs (vessels, pipes, instrumentation, and
+        controls) calculated by power law as a function of total contactor(s) volume. Operating costs calculated as the
+        required makeup and regeneration of GAC adsorbent. Energy for backwash and booster pumps considered negligible
+        compared to regeneration costs
         """
         make_capital_cost_var(blk)
         blk.contactor_cost = pyo.Var(
@@ -990,30 +1152,30 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
         blk.contactor_cost_constraint = pyo.Constraint(
             expr=blk.contactor_cost
             == (
-                blk.costing_package.gac_num_contactors_op
-                + blk.costing_package.gac_num_contactors_redundant
+                blk.costing_package.gac.num_contactors_op
+                + blk.costing_package.gac.num_contactors_redundant
             )
             * pyo.units.convert(
                 (
-                    blk.costing_package.gac_contactor_cost_coeff_3
+                    blk.costing_package.gac.contactor_cost_coeff_3
                     * (
                         blk.unit_model.bed_volume
-                        / blk.costing_package.gac_num_contactors_op
+                        / blk.costing_package.gac.num_contactors_op
                     )
                     ** 3
-                    + blk.costing_package.gac_contactor_cost_coeff_2
+                    + blk.costing_package.gac.contactor_cost_coeff_2
                     * (
                         blk.unit_model.bed_volume
-                        / blk.costing_package.gac_num_contactors_op
+                        / blk.costing_package.gac.num_contactors_op
                     )
                     ** 2
-                    + blk.costing_package.gac_contactor_cost_coeff_1
+                    + blk.costing_package.gac.contactor_cost_coeff_1
                     * (
                         blk.unit_model.bed_volume
-                        / blk.costing_package.gac_num_contactors_op
+                        / blk.costing_package.gac.num_contactors_op
                     )
                     ** 1
-                    + blk.costing_package.gac_contactor_cost_coeff_0
+                    + blk.costing_package.gac.contactor_cost_coeff_0
                 ),
                 to_units=blk.costing_package.base_currency,
             )
@@ -1021,7 +1183,7 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
         blk.bed_mass_gac_ref_constraint = pyo.Constraint(
             expr=blk.bed_mass_gac_ref
             == smooth_min(
-                blk.costing_package.bed_mass_gac_max_ref / pyo.units.kg,
+                blk.costing_package.gac.bed_mass_max_ref / pyo.units.kg,
                 pyo.units.convert(blk.unit_model.bed_mass_gac, to_units=pyo.units.kg)
                 / pyo.units.kg,
             )
@@ -1030,10 +1192,10 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
         blk.adsorbent_unit_cost_constraint = pyo.Constraint(
             expr=blk.adsorbent_unit_cost
             == pyo.units.convert(
-                blk.costing_package.gac_adsorbent_unit_cost_coeff
+                blk.costing_package.gac.adsorbent_unit_cost_coeff
                 * pyo.exp(
                     blk.bed_mass_gac_ref
-                    * blk.costing_package.gac_adsorbent_unit_cost_exp_coeff
+                    * blk.costing_package.gac.adsorbent_unit_cost_exp_coeff
                 ),
                 to_units=blk.costing_package.base_currency * pyo.units.kg**-1,
             )
@@ -1046,19 +1208,19 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
             expr=blk.other_process_cost
             == pyo.units.convert(
                 (
-                    blk.costing_package.gac_other_cost_coeff
-                    * ((pyo.units.m**3) ** -blk.costing_package.gac_other_cost_exp)
+                    blk.costing_package.gac.other_cost_coeff
+                    * ((pyo.units.m**3) ** -blk.costing_package.gac.other_cost_exp)
                     * (
                         (
-                            blk.costing_package.gac_num_contactors_op
-                            + blk.costing_package.gac_num_contactors_redundant
+                            blk.costing_package.gac.num_contactors_op
+                            + blk.costing_package.gac.num_contactors_redundant
                         )
                         * (
                             blk.unit_model.bed_volume
-                            / blk.costing_package.gac_num_contactors_op
+                            / blk.costing_package.gac.num_contactors_op
                         )
                     )
-                    ** blk.costing_package.gac_other_cost_exp
+                    ** blk.costing_package.gac.other_cost_exp
                 ),
                 to_units=blk.costing_package.base_currency,
             )
@@ -1087,9 +1249,9 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
             expr=blk.gac_regen_cost
             == pyo.units.convert(
                 (
-                    blk.costing_package.gac_regen_unit_cost
+                    blk.costing_package.gac.regen_unit_cost
                     * (
-                        blk.costing_package.gac_regen_frac
+                        blk.costing_package.gac.regen_frac
                         * blk.unit_model.gac_mass_replace_rate
                     )
                 ),
@@ -1101,9 +1263,9 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
             expr=blk.gac_makeup_cost
             == pyo.units.convert(
                 (
-                    blk.costing_package.gac_makeup_unit_cost
+                    blk.costing_package.gac.makeup_unit_cost
                     * (
-                        (1 - blk.costing_package.gac_regen_frac)
+                        (1 - blk.costing_package.gac.regen_frac)
                         * blk.unit_model.gac_mass_replace_rate
                     )
                 ),
@@ -1125,7 +1287,7 @@ class WaterTAPCostingData(FlowsheetCostingBlockData):
         Out:
             Steam thermal capacity (latent heat of condensation * density) in kJ/m3
         """
-        pressure_sat = blk.costing_package.crystallizer_steam_pressure
+        pressure_sat = blk.costing_package.crystallizer.steam_pressure
         # 1. Compute saturation temperature of steam: computed from El-Dessouky expression
         tsat_constants = [
             42.6776 * pyo.units.K,
@@ -1195,6 +1357,7 @@ WaterTAPCostingData.unit_mapping = {
     NanoFiltration0D: WaterTAPCostingData.cost_nanofiltration,
     NanofiltrationZO: WaterTAPCostingData.cost_nanofiltration,
     Crystallization: WaterTAPCostingData.cost_crystallizer,
+    Ultraviolet0D: WaterTAPCostingData.cost_uv_aop,
     Electrodialysis0D: WaterTAPCostingData.cost_electrodialysis,
     Electrodialysis1D: WaterTAPCostingData.cost_electrodialysis,
     GAC: WaterTAPCostingData.cost_gac,
@@ -1309,11 +1472,44 @@ def cost_by_flow_volume(blk, flow_cost, flow_to_cost):
     Generic function for costing by flow volume.
 
     Args:
-        flow_cost - The cost of the pump in [currency]/([volume]/[time])
+        flow_cost - The cost of the device in [currency]/([volume]/[time])
         flow_to_cost - The flow costed in [volume]/[time]
     """
     make_capital_cost_var(blk)
     blk.flow_cost = pyo.Expression(expr=flow_cost)
     blk.capital_cost_constraint = pyo.Constraint(
         expr=blk.capital_cost == blk.flow_cost * flow_to_cost
+    )
+
+
+def cost_uv_aop_bundle(blk, reactor_cost, lamp_cost, factor_lamp_replacement):
+    """
+    Generic function for costing a UV system.
+
+    Args:
+        reactor_cost - The cost of UV reactor in [currency]/[volume]
+        lamp_cost - The costs of the lamps, sleeves, ballasts and sensors in [currency]/[kW]
+    """
+    make_capital_cost_var(blk)
+    make_fixed_operating_cost_var(blk)
+    blk.reactor_cost = pyo.Expression(expr=reactor_cost)
+    blk.lamp_cost = pyo.Expression(expr=lamp_cost)
+    blk.factor_lamp_replacement = pyo.Expression(expr=factor_lamp_replacement)
+
+    flow_in = pyo.units.convert(
+        blk.unit_model.control_volume.properties_in[0].flow_vol,
+        to_units=pyo.units.m**3 / pyo.units.hr,
+    )
+
+    electricity_demand = pyo.units.convert(
+        blk.unit_model.electricity_demand[0], to_units=pyo.units.kW
+    )
+
+    blk.capital_cost_constraint = pyo.Constraint(
+        expr=blk.capital_cost
+        == blk.reactor_cost * flow_in + blk.lamp_cost * electricity_demand
+    )
+    blk.fixed_operating_cost_constraint = pyo.Constraint(
+        expr=blk.fixed_operating_cost
+        == blk.factor_lamp_replacement * blk.lamp_cost * electricity_demand
     )

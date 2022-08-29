@@ -22,9 +22,9 @@ from pyomo.environ import (
     Suffix,
     units as pyunits,
 )
-
-# from pyomo.environ import *
+from idaes.core.util.math import smooth_max
 from pyomo.common.config import ConfigBlock, ConfigValue, In
+from enum import Enum, auto
 
 # Import IDAES cores
 from idaes.core import (
@@ -43,6 +43,11 @@ import idaes.core.util.scaling as iscale
 import idaes.logger as idaeslog
 
 _log = idaeslog.getLogger(__name__)
+
+# ---------------------------------------------------------------------
+class UVDoseType(Enum):
+    fixed = auto()  # uv dose is a user specified value
+    calculated = auto()
 
 
 @declare_process_block_class("Ultraviolet0D")
@@ -169,6 +174,19 @@ class Ultraviolet0DData(UnitModelBlockData):
     see property package for documentation.}""",
         ),
     )
+    CONFIG.declare(
+        "uv_dose_type",
+        ConfigValue(
+            default=UVDoseType.fixed,
+            domain=In(UVDoseType),
+            description="Surface diffusion coefficient",
+            doc="""Indicates whether the uv dose will be calculated or fixed by the user
+        **default** - UVDoseType.fixed.
+        **Valid values:** {
+        **UVDoseType.fixed** - user specifies uv dose,
+        **UVDoseType.calculated** - calculates uv dose based on the lamp power and UV transmittance}""",
+        ),
+    )
 
     def build(self):
         # Call UnitModel.build to setup dynamics
@@ -215,7 +233,7 @@ class Ultraviolet0DData(UnitModelBlockData):
             self.config.property_package.phase_list,
             self.config.property_package.solute_set,
             initialize=2.5e-4,
-            bounds=(1e-18, 100),
+            bounds=(0, None),
             domain=NonNegativeReals,
             units=units_meta("time") ** 2 * units_meta("mass") ** -1,
             doc="Inactivation rate coefficient with respect to uv dose.",
@@ -225,7 +243,7 @@ class Ultraviolet0DData(UnitModelBlockData):
             self.config.property_package.phase_list,
             self.config.property_package.solute_set,
             initialize=2.5e-3,
-            bounds=(1e-18, 100),
+            bounds=(0, None),
             domain=NonNegativeReals,
             units=units_meta("time") ** -1,
             doc="Overall pseudo-first order rate constant.",
@@ -235,7 +253,7 @@ class Ultraviolet0DData(UnitModelBlockData):
             self.config.property_package.phase_list,
             self.config.property_package.solute_set,
             initialize=2e-3,
-            bounds=(1e-18, 100),
+            bounds=(0, None),
             domain=NonNegativeReals,
             units=units_meta("time") ** -1,
             doc="Pseudo-first order rate constant for direct photolysis of component.",
@@ -245,7 +263,7 @@ class Ultraviolet0DData(UnitModelBlockData):
             self.config.property_package.phase_list,
             self.config.property_package.solute_set,
             initialize=5e-4,
-            bounds=(1e-18, 100),
+            bounds=(0, 100),
             domain=NonNegativeReals,
             units=units_meta("time") ** -1,
             doc="Pseudo-first order rate constant for indirect photolysis of component.",
@@ -260,38 +278,31 @@ class Ultraviolet0DData(UnitModelBlockData):
         # Add uv variables
         self.uv_dose = Var(
             initialize=5000,
-            bounds=(1e-18, 10000),
+            bounds=(0, None),
             domain=NonNegativeReals,
             units=units_meta("mass") * units_meta("time") ** -2,
             doc="UV dose.",
         )
         self.uv_intensity = Var(
             initialize=10,
-            bounds=(1e-18, 10000),
+            bounds=(0, None),
             domain=NonNegativeReals,
             units=units_meta("mass") * units_meta("time") ** -3,
             doc="Average intensity of UV light.",
         )
         self.exposure_time = Var(
             initialize=500,
-            bounds=(1e-18, 10000),
+            bounds=(0, None),
             domain=NonNegativeReals,
             units=units_meta("time"),
             doc="Exposure time of UV light.",
         )
-        self.UVT = Var(
-            initialize=0.9,
-            bounds=(0, 1),
+        self.reactor_volume = Var(
+            initialize=1,
+            bounds=(0, None),
             domain=NonNegativeReals,
-            units=pyunits.dimensionless,
-            doc="UV transmittance.",
-        )
-        self.UVA = Var(
-            initialize=0.045,
-            bounds=(0, 10),
-            domain=NonNegativeReals,
-            units=pyunits.cm**-1,
-            doc="UV absorbance.",
+            units=units_meta("length") ** 3,
+            doc="UV reactor volume.",
         )
 
         # Add electricity parameters
@@ -307,15 +318,59 @@ class Ultraviolet0DData(UnitModelBlockData):
             doc="Electricity demand per component",
         )
 
-        # self.electricity_demand_minimum = Var(
-        #     self.flowsheet().config.time,
-        #     initialize=1,
-        #     bounds=(0, None),
-        #     units=units_meta("mass")
-        #     * units_meta("length") ** 2
-        #     * units_meta("time") ** -3,
-        #     doc="Minimum electricity demand of unit",
-        # )
+        self.max_phase_electricity_demand = Var(
+            self.flowsheet().config.time,
+            self.config.property_package.phase_list,
+            self.config.property_package.solute_set,
+            initialize=1,
+            bounds=(0, None),
+            units=units_meta("mass")
+            * units_meta("length") ** 2
+            * units_meta("time") ** -3,
+            doc="Maximum electricity demand for components with different phases",
+        )
+
+        self.electricity_demand_comp = Var(
+            self.flowsheet().config.time,
+            self.config.property_package.solute_set,
+            initialize=1,
+            bounds=(0, None),
+            units=units_meta("mass")
+            * units_meta("length") ** 2
+            * units_meta("time") ** -3,
+            doc="Electricity demand per component",
+        )
+
+        self.max_component_electricity_demand = Var(
+            self.flowsheet().config.time,
+            self.config.property_package.solute_set,
+            initialize=1,
+            bounds=(0, None),
+            units=units_meta("mass")
+            * units_meta("length") ** 2
+            * units_meta("time") ** -3,
+            doc="Maximum electricity demand for multiple components",
+        )
+
+        self.electricity_demand = Var(
+            self.flowsheet().config.time,
+            initialize=1,
+            bounds=(0, None),
+            units=units_meta("mass")
+            * units_meta("length") ** 2
+            * units_meta("time") ** -3,
+            doc="Electricity demand of unit",
+        )
+
+        self.eps_electricity = Param(
+            mutable=True,
+            initialize=1e-3,
+            domain=NonNegativeReals,
+            units=units_meta("mass")
+            * units_meta("length") ** 2
+            * units_meta("time") ** -3,
+            doc="Smoothing term for maximum electricity demand",
+        )
 
         self.electrical_efficiency_phase_comp = Var(
             self.flowsheet().time,
@@ -381,11 +436,93 @@ class Ultraviolet0DData(UnitModelBlockData):
         def eq_uv_dose(b):
             return b.uv_dose == b.uv_intensity * b.exposure_time
 
+        # ---------------------------------------------------------------------
+        if self.config.uv_dose_type == UVDoseType.calculated:
+            self.UVT = Var(
+                initialize=0.9,
+                bounds=(0, 1),
+                domain=NonNegativeReals,
+                units=pyunits.dimensionless,
+                doc="UV transmittance.",
+            )
+            self.A_coeff = Var(
+                initialize=2.15138,
+                bounds=(0, None),
+                domain=NonNegativeReals,
+                units=pyunits.dimensionless,
+                doc="UV dose delivery model coefficient A.",
+            )
+            self.B_coeff = Var(
+                initialize=10.2072,
+                bounds=(0, None),
+                domain=NonNegativeReals,
+                units=pyunits.dimensionless,
+                doc="UV dose delivery model coefficient B.",
+            )
+            self.C_coeff = Var(
+                initialize=0.696709,
+                bounds=(0, None),
+                domain=NonNegativeReals,
+                units=pyunits.dimensionless,
+                doc="UV dose delivery model coefficient C.",
+            )
+            self.D_coeff = Var(
+                initialize=1.09563,
+                bounds=(0, None),
+                domain=NonNegativeReals,
+                units=pyunits.dimensionless,
+                doc="UV dose delivery model coefficient D.",
+            )
+            self.relative_lamp_output = Var(
+                initialize=1,
+                bounds=(0, None),
+                domain=NonNegativeReals,
+                units=pyunits.dimensionless,
+                doc="Output from the lamps relative to a new lamp, S/S0.",
+            )
+            self.num_of_banks = Var(
+                initialize=2,
+                bounds=(0, None),
+                domain=NonNegativeReals,
+                units=pyunits.dimensionless,
+                doc="Number of banks.",
+            )
+
+            @self.Constraint(
+                doc="Constraint for UV dose based on lamp power and UV transmittance",
+            )
+            def eq_uv_dose_detail(b):
+                Qr = pyunits.convert(
+                    pyunits.convert(
+                        b.control_volume.properties_in[0].flow_vol,
+                        to_units=pyunits.gal / pyunits.day,
+                    )
+                    / (1000000 * pyunits.gal / pyunits.day),
+                    to_units=pyunits.dimensionless,
+                )
+                UVA = -log10(b.UVT)
+                return b.uv_dose == pyunits.convert(
+                    (
+                        10**b.A_coeff
+                        * UVA ** (b.B_coeff * UVA)
+                        * (b.relative_lamp_output / Qr) ** b.C_coeff
+                        * b.num_of_banks**b.D_coeff
+                        * pyunits.mJ
+                        / pyunits.cm**2
+                    ),
+                    to_units=units_meta("mass") * units_meta("time") ** -2,
+                )
+
+        # UV reactor volume
         @self.Constraint(
-            doc="Constraint for UV absorbance",
+            doc="Constraint for UV reactor volume",
         )
-        def eq_UVA(b):
-            return b.UVA == -log10(b.UVT) / (1 * pyunits.cm)
+        def eq_uv_reactor_volume(b):
+            t0 = b.flowsheet().time.first()
+            return (
+                b.reactor_volume
+                == b.control_volume.properties_in[t0].flow_vol * b.exposure_time
+            )
 
         # rate constant
         @self.Constraint(
@@ -416,20 +553,22 @@ class Ultraviolet0DData(UnitModelBlockData):
         )
         def eq_outlet_conc(b, t, p, j):
             prop_in = b.control_volume.properties_in[t]
-            prop_out = b.control_volume.properties_out[t]
             comp = self.config.property_package.get_component(j)
             if comp.is_solvent():
-                return prop_out.get_material_flow_terms(
-                    p, j
-                ) == prop_in.get_material_flow_terms(p, j)
+                return b.control_volume.mass_transfer_term[t, p, j] == 0
             elif comp.is_solute():
-                return prop_out.get_material_flow_terms(
-                    p, j
-                ) == prop_in.get_material_flow_terms(p, j) * exp(
-                    pyunits.convert(
-                        -b.uv_dose * b.inactivation_rate[p, j],
-                        to_units=pyunits.dimensionless,
+                return (
+                    prop_in.get_material_flow_terms(p, j)
+                    * (
+                        1
+                        - exp(
+                            pyunits.convert(
+                                -b.uv_dose * b.inactivation_rate[p, j],
+                                to_units=pyunits.dimensionless,
+                            )
+                        )
                     )
+                    == -b.control_volume.mass_transfer_term[t, p, j]
                 )
 
         # electricity
@@ -456,13 +595,75 @@ class Ultraviolet0DData(UnitModelBlockData):
                 / b.lamp_efficiency
             )
 
-        # TODO: add minimum electricity demand for multiple solutes
-        # @self.Constraint(
-        #     self.flowsheet().config.time,
-        #     doc="Constraints for minimum electricity demand of the UV reactor.",
-        # )
-        # def eq_minimum_electricity_demand(b, t):
-        #     return b.electricity_demand_minimum[t] == smooth_max(b.electricity_demand_phase_comp[t, p, j])
+        @self.Constraint(
+            self.flowsheet().config.time,
+            self.config.property_package.phase_list,
+            self.config.property_package.solute_set,
+            doc="Constraints for calculating maximum electricity demand for different phases.",
+        )
+        def eq_max_phase_electricity_demand(b, t, p, j):
+            if p == b.config.property_package.phase_list.first():
+                return (
+                    b.max_phase_electricity_demand[t, p, j]
+                    == b.electricity_demand_phase_comp[t, p, j]
+                )
+            else:
+                return b.max_phase_electricity_demand[t, p, j] == (
+                    smooth_max(
+                        b.max_phase_electricity_demand[
+                            t, b.config.property_package.phase_list.prev(p), j
+                        ],
+                        b.electricity_demand_phase_comp[t, p, j],
+                        b.eps_electricity,
+                    )
+                )
+
+        @self.Constraint(
+            self.flowsheet().config.time,
+            self.config.property_package.solute_set,
+            doc="Constraints for electricity demand of each component.",
+        )
+        def eq_electricity_demand_comp(b, t, j):
+            return (
+                b.electricity_demand_comp[t, j]
+                == b.max_phase_electricity_demand[
+                    t, b.config.property_package.phase_list.last(), j
+                ]
+            )
+
+        @self.Constraint(
+            self.flowsheet().config.time,
+            self.config.property_package.solute_set,
+            doc="Constraints for calculating maximum electricity demand for multiple components.",
+        )
+        def eq_max_electricity_demand(b, t, j):
+            if j == b.config.property_package.solute_set.first():
+                return (
+                    b.max_component_electricity_demand[t, j]
+                    == b.electricity_demand_comp[t, j]
+                )
+            else:
+                return b.max_component_electricity_demand[t, j] == (
+                    smooth_max(
+                        b.max_component_electricity_demand[
+                            t, b.config.property_package.solute_set.prev(j)
+                        ],
+                        b.electricity_demand_comp[t, j],
+                        b.eps_electricity,
+                    )
+                )
+
+        @self.Constraint(
+            self.flowsheet().config.time,
+            doc="Constraints for total electricity demand of the UV reactor.",
+        )
+        def eq_electricity_demand(b, t):
+            return (
+                b.electricity_demand[t]
+                == b.max_component_electricity_demand[
+                    t, b.config.property_package.solute_set.last()
+                ]
+            )
 
     def initialize_build(
         blk, state_args=None, outlvl=idaeslog.NOTSET, solver=None, optarg=None
@@ -537,7 +738,6 @@ class Ultraviolet0DData(UnitModelBlockData):
     def calculate_scaling_factors(self):
         super().calculate_scaling_factors()
 
-        # TODO: require users to set scaling factor for uv dose, uv_intensity and exposure time
         # setting scaling factors for variables
         # these variables should have user input, if not there will be a warning
         if iscale.get_scaling_factor(self.uv_intensity) is None:
@@ -580,26 +780,57 @@ class Ultraviolet0DData(UnitModelBlockData):
 
         if iscale.get_scaling_factor(self.electrical_efficiency_phase_comp) is None:
             sf = iscale.get_scaling_factor(
-                self.electrical_efficiency_phase_comp, default=1e-6, warning=True
+                self.electrical_efficiency_phase_comp, default=1e-5, warning=True
             )
         iscale.set_scaling_factor(self.electrical_efficiency_phase_comp, sf)
 
         # these variables do not typically require user input,
         # will not override if the user does provide the scaling factor
         if iscale.get_scaling_factor(self.lamp_efficiency) is None:
-            iscale.set_scaling_factor(self.lamp_efficiency, 10)
+            iscale.set_scaling_factor(self.lamp_efficiency, 1)
 
-        if iscale.get_scaling_factor(self.UVT) is None:
-            iscale.set_scaling_factor(self.UVT, 10)
+        if hasattr(self, "UVT"):
+            if iscale.get_scaling_factor(self.UVT) is None:
+                iscale.set_scaling_factor(self.UVT, 1)
 
-        if iscale.get_scaling_factor(self.UVA) is None:
-            iscale.set_scaling_factor(self.UVA, 100)
+        if hasattr(self, "A_coeff"):
+            if iscale.get_scaling_factor(self.A_coeff) is None:
+                iscale.set_scaling_factor(self.A_coeff, 1)
+
+        if hasattr(self, "B_coeff"):
+            if iscale.get_scaling_factor(self.B_coeff) is None:
+                iscale.set_scaling_factor(self.B_coeff, 1)
+
+        if hasattr(self, "C_coeff"):
+            if iscale.get_scaling_factor(self.C_coeff) is None:
+                iscale.set_scaling_factor(self.C_coeff, 1)
+
+        if hasattr(self, "D_coeff"):
+            if iscale.get_scaling_factor(self.D_coeff) is None:
+                iscale.set_scaling_factor(self.D_coeff, 1)
+
+        if hasattr(self, "relative_lamp_output"):
+            if iscale.get_scaling_factor(self.relative_lamp_output) is None:
+                iscale.set_scaling_factor(self.relative_lamp_output, 1)
+
+        if hasattr(self, "num_of_banks"):
+            if iscale.get_scaling_factor(self.num_of_banks) is None:
+                iscale.set_scaling_factor(self.num_of_banks, 1)
+
+        if iscale.get_scaling_factor(self.reactor_volume) is None:
+            sf = iscale.get_scaling_factor(
+                self.control_volume.properties_in[0].flow_vol
+            ) * iscale.get_scaling_factor(self.exposure_time)
+            iscale.set_scaling_factor(self.reactor_volume, sf)
 
         if iscale.get_scaling_factor(self.dens_solvent) is None:
             sf = iscale.get_scaling_factor(
                 self.control_volume.properties_in[0].dens_mass_phase["Liq"]
             )
             iscale.set_scaling_factor(self.dens_solvent, sf)
+
+        if iscale.get_scaling_factor(self.eps_electricity) is None:
+            iscale.set_scaling_factor(self.eps_electricity, 1e3)
 
         for (t, p, j), v in self.electricity_demand_phase_comp.items():
             if iscale.get_scaling_factor(v) is None:
@@ -618,14 +849,36 @@ class Ultraviolet0DData(UnitModelBlockData):
                 )
                 iscale.set_scaling_factor(v, sf)
 
-        for (t, p, j), v in self.control_volume.mass_transfer_term.items():
+        for (t, p, j), v in self.max_phase_electricity_demand.items():
             if iscale.get_scaling_factor(v) is None:
+                p = self.config.property_package.phase_list.first()
                 sf = iscale.get_scaling_factor(
-                    self.control_volume.properties_in[t].get_material_flow_terms(p, j)
+                    self.electricity_demand_phase_comp[t, p, j], warning=True
                 )
-                comp = self.config.property_package.get_component(j)
-                if comp.is_solute:
-                    sf *= 1e2  # solute typically has mass transfer 2 orders magnitude less than flow
+                iscale.set_scaling_factor(v, sf)
+
+        for (t, j), v in self.electricity_demand_comp.items():
+            if iscale.get_scaling_factor(v) is None:
+                p = self.config.property_package.phase_list.last()
+                sf = iscale.get_scaling_factor(
+                    self.max_phase_electricity_demand[t, p, j], warning=True
+                )
+                iscale.set_scaling_factor(v, sf)
+
+        for (t, j), v in self.max_component_electricity_demand.items():
+            if iscale.get_scaling_factor(v) is None:
+                j = self.config.property_package.solute_set.first()
+                sf = iscale.get_scaling_factor(
+                    self.electricity_demand_comp[t, j], warning=True
+                )
+                iscale.set_scaling_factor(v, sf)
+
+        for t, v in self.electricity_demand.items():
+            if iscale.get_scaling_factor(v) is None:
+                j = self.config.property_package.solute_set.last()
+                sf = iscale.get_scaling_factor(
+                    self.max_component_electricity_demand[t, j], warning=True
+                )
                 iscale.set_scaling_factor(v, sf)
 
         # TODO: update IDAES control volume to scale mass_transfer and enthalpy_transfer
@@ -639,16 +892,6 @@ class Ultraviolet0DData(UnitModelBlockData):
                     self.control_volume.material_balances[t, j], sf
                 )
 
-        for t, v in self.control_volume.enthalpy_transfer.items():
-            if iscale.get_scaling_factor(v) is None:
-                sf = iscale.get_scaling_factor(
-                    self.control_volume.properties_in[t].enth_flow
-                )
-                iscale.set_scaling_factor(v, sf)
-                iscale.constraint_scaling_transform(
-                    self.control_volume.enthalpy_balances[t], sf
-                )
-
         # transforming constraints
         for c in self.eq_uv_dose.values():
             if iscale.get_scaling_factor(self.uv_dose) is None:
@@ -659,11 +902,8 @@ class Ultraviolet0DData(UnitModelBlockData):
                 sf = iscale.get_scaling_factor(self.uv_dose)
             iscale.constraint_scaling_transform(c, sf)
 
-        for c in self.eq_UVA.values():
-            if iscale.get_scaling_factor(self.UVA) is None:
-                sf = -log10(iscale.get_scaling_factor(self.UVT))
-            else:
-                sf = iscale.get_scaling_factor(self.UVA)
+        for c in self.eq_uv_reactor_volume.values():
+            sf = iscale.get_scaling_factor(self.reactor_volume)
             iscale.constraint_scaling_transform(c, sf)
 
         for ind, c in self.eq_rate_constant.items():
@@ -695,3 +935,27 @@ class Ultraviolet0DData(UnitModelBlockData):
             (t, p, j) = ind
             sf = iscale.get_scaling_factor(self.electricity_demand_phase_comp[t, p, j])
             iscale.constraint_scaling_transform(c, sf)
+
+        for ind, c in self.eq_max_phase_electricity_demand.items():
+            (t, p, j) = ind
+            sf = iscale.get_scaling_factor(self.max_phase_electricity_demand[t, p, j])
+            iscale.constraint_scaling_transform(c, sf)
+
+        for ind, c in self.eq_electricity_demand_comp.items():
+            (t, j) = ind
+            sf = iscale.get_scaling_factor(self.electricity_demand_comp[t, j])
+            iscale.constraint_scaling_transform(c, sf)
+
+        for ind, c in self.eq_max_electricity_demand.items():
+            (t, j) = ind
+            sf = iscale.get_scaling_factor(self.max_component_electricity_demand[t, j])
+            iscale.constraint_scaling_transform(c, sf)
+
+        for t, c in self.eq_electricity_demand.items():
+            sf = iscale.get_scaling_factor(self.electricity_demand[t])
+            iscale.constraint_scaling_transform(c, sf)
+
+        if hasattr(self, "eq_uv_dose_detail"):
+            for c in self.eq_uv_dose_detail.values():
+                sf = iscale.get_scaling_factor(self.uv_dose)
+                iscale.constraint_scaling_transform(c, sf)

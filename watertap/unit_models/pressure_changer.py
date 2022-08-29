@@ -12,7 +12,7 @@
 ###############################################################################
 
 from pyomo.common.config import ConfigBlock, ConfigValue, In
-from pyomo.environ import Var, units as pyunits, Expr_if
+from pyomo.environ import Var, units as pyunits, Expr_if, value
 
 from enum import Enum, auto
 
@@ -61,7 +61,8 @@ class PumpIsothermalData(PumpData):
         # Isothermal pump set up
         # ---------------------------------------
 
-        self.control_volume.del_component(self.control_volume.enthalpy_balances)
+        if hasattr(self.control_volume, "enthalpy_balances"):
+            self.control_volume.del_component(self.control_volume.enthalpy_balances)
 
         @self.control_volume.Constraint(
             self.flowsheet().config.time, doc="Isothermal constraint"
@@ -82,7 +83,7 @@ class PumpIsothermalData(PumpData):
             )
 
             self.bep_eta = Var(
-                initialize=self.efficiency_pump[0].value,
+                initialize=0.8,
                 doc="Best efficiency of the centrifugal pump",
                 units=pyunits.dimensionless,
             )
@@ -97,8 +98,9 @@ class PumpIsothermalData(PumpData):
             # add constraints
             @self.Constraint(self.flowsheet().time, doc="Pump flow ratio")
             def flow_ratio_constraint(b, t):
-                return b.flow_ratio[t] * b.bep_flow == (
-                    b.control_volume.properties_out[t].flow_vol
+                return (
+                    b.flow_ratio[t] * b.bep_flow
+                    == b.control_volume.properties_in[t].flow_vol
                 )
 
         if self.config.variable_efficiency is VariableEfficiency.flow:
@@ -119,36 +121,13 @@ class PumpIsothermalData(PumpData):
                 )
 
         elif self.config.variable_efficiency is VariableEfficiency.flow_head:
-            raise NotImplemented(
+            raise NotImplementedError(
                 "Config option 'VariableEfficiency.flow_head' is not fully implemented yet"
             )
-            # TODO - Implement pump efficiency expression based on flow and head
-            # self.bep_head = Var(
-            #     initialize=1.0,
-            #     doc="Best efficiency point head of the centrifugal pump",
-            #     units=pyunits.m,
-            # )
-            #
-            # self.head_ratio = Var(
-            #     self.flowsheet().time,
-            #     initialize=1.0,
-            #     doc="Ratio of pump head to best efficiency point head",
-            #     units=pyunits.dimensionless,
-            # )
-            #
-            # @self.Constraint(self.flowsheet().time, doc="Pump head ratio")
-            # def head_ratio_constraint(b, t):
-            #
-            #     return b.head_ratio[t] * b.bep_head * Constants.acceleration_gravity == (
-            #             (
-            #                     b.control_volume.properties_out[t].pressure
-            #                     / b.control_volume.properties_out[t].dens_mass_phase["Liq"]
-            #             )
-            #             - (
-            #                     b.control_volume.properties_in[t].pressure
-            #                     / b.control_volume.properties_in[t].dens_mass_phase["Liq"]
-            #             )
-            #     )
+            # TODO - Implement pump efficiency expression based on flow and head (bep_head, head_ratio)
+        else:
+            pass
+
         if self.config.variable_efficiency is not VariableEfficiency.none:
             # replace the constant efficiency assumption using eta_ratio
             # must be done after the eta_ratio expression is created.
@@ -167,28 +146,36 @@ class PumpIsothermalData(PumpData):
 
         if hasattr(self, "bep_flow"):
             if iscale.get_scaling_factor(self.bep_flow) is None:
-                inv_flow = self.bep_flow.value**-1
-                iscale.set_scaling_factor(self.bep_flow, inv_flow)
+                sf = value(self.bep_flow) ** -1
+                iscale.set_scaling_factor(self.bep_flow, sf)
+
+        if hasattr(self, "bep_head"):
+            if iscale.get_scaling_factor(self.bep_head) is None:
+                sf = value(self.bep_head) ** -1
+                iscale.set_scaling_factor(self.bep_head, sf)
 
         if hasattr(self, "bep_eta"):
             if iscale.get_scaling_factor(self.bep_eta) is None:
                 iscale.set_scaling_factor(self.bep_eta, 1)
 
-        if hasattr(self, "flow_ratio"):
-            if iscale.get_scaling_factor(self.flow_ratio) is None:
-                iscale.set_scaling_factor(self.flow_ratio, 1)
+        for t in self.flowsheet().time:
+            if hasattr(self, "flow_ratio"):
+                if iscale.get_scaling_factor(self.flow_ratio[t]) is None:
+                    iscale.set_scaling_factor(self.flow_ratio[t], 1)
 
-        if hasattr(self, "efficiency_pump"):
-            if iscale.get_scaling_factor(self.efficiency_pump[0]) is None:
-                iscale.set_scaling_factor(self.efficiency_pump[0], 1)
+            if hasattr(self, "efficiency_pump"):
+                if iscale.get_scaling_factor(self.efficiency_pump[t]) is None:
+                    iscale.set_scaling_factor(self.efficiency_pump[t], 1)
 
-        # if hasattr(self, "bep_head"):
-        #     if iscale.get_scaling_factor(self.bep_head) is None:
-        #         iscale.set_scaling_factor(self.bep_head, 0.01)
+            # scale constraints
 
-        # if hasattr(self, "head_ratio"):
-        #     if iscale.get_scaling_factor(self.head_ratio) is None:
-        #         iscale.set_scaling_factor(self.head_ratio, 1)
+            if hasattr(self, "flow_ratio_constraint"):
+                if iscale.get_scaling_factor(self.flow_ratio_constraint[t]) is None:
+                    iscale.set_scaling_factor(self.flow_ratio_constraint[t], 1)
+
+            if hasattr(self, "eta_constraint"):
+                if iscale.get_scaling_factor(self.eta_constraint[t]) is None:
+                    iscale.set_scaling_factor(self.eta_constraint[t], 1)
 
 
 @declare_process_block_class("EnergyRecoveryDevice")
