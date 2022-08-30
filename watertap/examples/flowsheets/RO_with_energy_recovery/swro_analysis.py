@@ -14,6 +14,7 @@ def set_up_sensitivity(m):
 
     # create outputs
     outputs["LCOW"] = m.fs.costing.LCOW
+    outputs["SCI"] = m.fs.costing.specific_electrical_carbon_intensity
     outputs["permeate_flowrate"] = m.fs.product.properties[0].flow_vol_phase["Liq"]
     outputs["recovery_rate"] = m.fs.RO.recovery_mass_phase_comp[0.0, "Liq", "H2O"]
     outputs["pressure"] = m.fs.P1.control_volume.properties_out[0].pressure * 1e-5
@@ -22,7 +23,7 @@ def set_up_sensitivity(m):
 
 
 def run_analysis(case_num, nx, interpolate_nan_outputs):
-    m = swro.main()
+    m = swro.main(erd_type=swro.ERDtype.pump_as_turbine)
 
     outputs, optimize_kwargs, opt_function = set_up_sensitivity(m)
 
@@ -49,6 +50,13 @@ def run_analysis(case_num, nx, interpolate_nan_outputs):
         sweep_params["utilization_factor"] = LinearSample(
             m.fs.costing.utilization_factor, 0.5, 1, nx
         )
+    elif case_num == 4:
+        sweep_params["recovery_ratio"] = LinearSample(
+            m.fs.RO.recovery_mass_phase_comp[0, "Liq", "H2O"], 0.3, 0.6, nx
+        )
+        sweep_params["co2_intensity"] = LinearSample(
+            m.fs.costing.electrical_carbon_intensity, 0, 1, nx
+        )
 
     else:
         raise ValueError("case_num = %d not recognized." % (case_num))
@@ -68,7 +76,7 @@ def run_analysis(case_num, nx, interpolate_nan_outputs):
     return global_results, sweep_params, m
 
 
-def main(case_num=1, nx=21, interpolate_nan_outputs=False):
+def main(case_num=4, nx=11, interpolate_nan_outputs=False):
     # when from the command line
     case_num = int(case_num)
     nx = int(nx)

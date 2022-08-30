@@ -58,6 +58,54 @@ def contour_figure(
     return fig, ax
 
 
+def carbon_intensity_contour(
+    path_to_results,
+    plot_type,
+    levels=20,
+    title=None,
+    xlabel=None,
+    ylabel=None,
+    xcol=0,
+    ycol=1,
+    zcol=2,
+    iso_col=None,
+    isolines=None,
+):
+    df = pd.read_csv(path_to_results)
+    column_names = df.columns.to_numpy()
+    df = df.pivot(column_names[xcol], column_names[ycol], column_names[zcol])
+    y = df.columns.values
+    x = df.index.values * 100
+    Z = df.values.T
+    X, Y = np.meshgrid(x, y)
+
+    fig, ax = plt.subplots()
+
+    if plot_type == "contourf":
+        cs = ax.contourf(X, Y, Z, levels=levels, cmap="Reds")
+        cbar = fig.colorbar(cs)
+        # cs = ax.contour(X, Y, norm_Z, levels=isolines, cmap="twilight")
+        # clbl = ax.clabel(cs)
+
+    else:
+        cs = ax.contour(X, Y, Z, levels=levels, cmap="YlGnBu_r")
+        clbl = ax.clabel(cs, colors="black")
+
+    if xlabel is None:
+        xlabel = column_names[0]
+    if ylabel is None:
+        ylabel = column_names[1]
+    if title is None:
+        title = column_names[2]
+
+    ax.set_xlabel("RO Recovery Ratio [%]")
+    ax.set_ylabel("Grid Carbon Intensity [kg/kWh]")
+    ax.set_title("Specific Carbon Intensity [kgCO2eq/m3]")
+    ax.set_ylim(top=max(y))
+    plt.show()
+    return fig, ax
+
+
 def line_sensitivities(path_to_results):
     df = pd.read_csv(path_to_results)
     column_names = df.columns.to_numpy()
@@ -231,16 +279,16 @@ def bar_plot(path_to_results):
 
 if __name__ == "__main__":
     current_dir = os.getcwd()
-    file_of_interest = "RO_with_energy_recovery\\sensitivity_1.csv"
+    file_of_interest = "RO_with_energy_recovery\\sensitivity_4.csv"
     path = os.path.join(current_dir, file_of_interest)
 
     # # line sensitivities
     # fig, ax = line_sensitivities(path)
     #
     # contour plot
-    fig1, ax1 = contour_figure(
-        path, plot_type="contourf", levels=48, isolines=[0, 100, 200]
-    )
+    # fig1, ax1 = contour_figure(
+    #     path, plot_type="contourf", levels=48, isolines=[0, 100, 200]
+    # )
     #
     #
     # # multi line plots
@@ -250,3 +298,10 @@ if __name__ == "__main__":
     #
     # # bar plot
     # fig4, ax4 = bar_plot(path)
+
+    # carbon intensity contour
+    fig5, ax5 = carbon_intensity_contour(
+        path,
+        plot_type="contourf",
+        zcol=3,
+    )
