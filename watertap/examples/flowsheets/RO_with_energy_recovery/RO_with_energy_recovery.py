@@ -15,7 +15,6 @@ from pyomo.environ import (
     ConcreteModel,
     value,
     Constraint,
-    Expression,
     Objective,
     Var,
     Param,
@@ -24,6 +23,7 @@ from pyomo.environ import (
     assert_optimal_termination,
 )
 from pyomo.network import Arc
+
 from idaes.core import FlowsheetBlock
 from idaes.core.solvers import get_solver
 from idaes.core.util.model_statistics import degrees_of_freedom
@@ -43,7 +43,12 @@ from watertap.unit_models.reverse_osmosis_0D import (
     PressureChangeType,
 )
 from watertap.unit_models.pressure_exchanger import PressureExchanger
-from watertap.unit_models.pressure_changer import Pump, EnergyRecoveryDevice
+
+from watertap.unit_models.pressure_changer import (
+    Pump,
+    EnergyRecoveryDevice,
+    VariableEfficiency,
+)
 from watertap.core.util.initialization import assert_degrees_of_freedom
 from watertap.costing import WaterTAPCosting
 
@@ -61,20 +66,26 @@ def erd_type_not_found(erd_type):
     )
 
 
-def main(erd_type=ERDtype.pressure_exchanger):
+def main(
+    erd_type=ERDtype.pressure_exchanger, variable_efficiency=VariableEfficiency.none
+):
     # set up solver
     solver = get_solver()
 
     # build, set, and initialize
-    m = build(erd_type=erd_type)
-    set_operating_conditions(m)
+    m = build(erd_type=erd_type, variable_efficiency=variable_efficiency)
+    set_operating_conditions(m, water_recovery=0.5, over_pressure=0.3, solver=solver)
     initialize_system(m, solver=solver)
 
     # optimize and display
     optimize_set_up(m)
     solve(m, solver=solver)
 
-    print("\n***---Simulation results---***")
+    # optimize and display
+    optimize_set_up(m)
+    optimize(m, solver=solver)
+
+    # print("\n***---Optimization results---***")
     display_system(m)
     display_design(m)
     if erd_type == ERDtype.pressure_exchanger:
@@ -87,11 +98,15 @@ def main(erd_type=ERDtype.pressure_exchanger):
     return m
 
 
-def build(erd_type=ERDtype.pressure_exchanger):
+def build(
+    erd_type=ERDtype.pressure_exchanger, variable_efficiency=VariableEfficiency.none
+):
+
     # flowsheet set up
     m = ConcreteModel()
     m.fs = FlowsheetBlock(default={"dynamic": False})
     m.fs.erd_type = erd_type
+    m.fs.variable_efficiency = variable_efficiency
     m.fs.properties = props.NaClParameterBlock()
     m.fs.costing = WaterTAPCosting()
 
@@ -101,7 +116,12 @@ def build(erd_type=ERDtype.pressure_exchanger):
     m.fs.disposal = Product(default={"property_package": m.fs.properties})
 
     # --- Main pump ---
-    m.fs.P1 = Pump(default={"property_package": m.fs.properties})
+    m.fs.P1 = Pump(
+        default={
+            "property_package": m.fs.properties,
+            "variable_efficiency": variable_efficiency,
+        }
+    )
     m.fs.P1.costing = UnitModelCostingBlock(
         default={"flowsheet_costing_block": m.fs.costing}
     )
@@ -127,7 +147,12 @@ def build(erd_type=ERDtype.pressure_exchanger):
         )
 
         m.fs.PXR = PressureExchanger(default={"property_package": m.fs.properties})
-        m.fs.P2 = Pump(default={"property_package": m.fs.properties})
+        m.fs.P2 = Pump(
+            default={
+                "property_package": m.fs.properties,
+                "variable_efficiency": variable_efficiency,
+            }
+        )
         m.fs.M1 = Mixer(
             default={
                 "property_package": m.fs.properties,
@@ -202,6 +227,7 @@ def build(erd_type=ERDtype.pressure_exchanger):
     iscale.set_scaling_factor(m.fs.RO.area, 1e-2)
     m.fs.feed.properties[0].flow_vol_phase["Liq"]
     m.fs.feed.properties[0].mass_frac_phase_comp["Liq", "NaCl"]
+
     if erd_type == ERDtype.pressure_exchanger:
         iscale.set_scaling_factor(m.fs.P2.control_volume.work, 1e-3)
         iscale.set_scaling_factor(m.fs.PXR.low_pressure_side.work, 1e-3)
@@ -213,6 +239,7 @@ def build(erd_type=ERDtype.pressure_exchanger):
         iscale.set_scaling_factor(m.fs.ERD.control_volume.work, 1e-3)
     else:
         erd_type_not_found(erd_type)
+
     # unused scaling factors needed by IDAES base costing module
     # calculate and propagate scaling factors
     iscale.calculate_scaling_factors(m)
@@ -248,8 +275,6 @@ def set_operating_conditions(
         hold_state=True,  # fixes the calculated component mass flow rates
     )
 
-    # pump 1, high pressure pump, 2 degrees of freedom (efficiency and outlet pressure)
-    m.fs.P1.efficiency_pump.fix(0.80)  # pump efficiency [-]
     operating_pressure = calculate_operating_pressure(
         feed_state_block=m.fs.feed.properties[0],
         over_pressure=over_pressure,
@@ -258,6 +283,24 @@ def set_operating_conditions(
         solver=solver,
     )
     m.fs.P1.control_volume.properties_out[0].pressure.fix(operating_pressure)
+
+    default_efficiency = 0.8
+    if m.fs.variable_efficiency is VariableEfficiency.none:
+        # pump 1, high pressure pump, 2 degrees of freedom (efficiency and outlet pressure)
+        m.fs.P1.efficiency_pump.fix(default_efficiency)  # pump efficiency [-]
+
+        if m.fs.erd_type is ERDtype.pressure_exchanger:
+            # pump 2, booster pump, 1 degree of freedom (efficiency, pressure must match high pressure pump)
+            m.fs.P2.efficiency_pump.fix(default_efficiency)
+
+    elif m.fs.variable_efficiency is VariableEfficiency.flow:
+        # fix pump 1 efficiency and flow ratio
+        m.fs.P1.bep_eta.fix(default_efficiency)
+        m.fs.P1.flow_ratio[0].fix(1)
+
+        if m.fs.erd_type is ERDtype.pressure_exchanger:
+            m.fs.P2.bep_eta.fix(default_efficiency)
+            m.fs.P2.flow_ratio[0].fix(1)
 
     # RO unit
     m.fs.RO.A_comp.fix(4.2e-12)  # membrane water permeability coefficient [m/s-Pa]
@@ -281,12 +324,8 @@ def set_operating_conditions(
     )
 
     if m.fs.erd_type == ERDtype.pressure_exchanger:
-        # pressure exchanger
-        m.fs.PXR.efficiency_pressure_exchanger.fix(
-            0.95
-        )  # pressure exchanger efficiency [-]
-        # pump 2, booster pump, 1 degree of freedom (efficiency, pressure must match high pressure pump)
-        m.fs.P2.efficiency_pump.fix(0.80)
+        # pressure exchanger efficiency
+        m.fs.PXR.efficiency_pressure_exchanger.fix(0.95)
 
     elif m.fs.erd_type == ERDtype.pump_as_turbine:
         # energy recovery turbine - efficiency and outlet pressure
@@ -298,6 +337,7 @@ def set_operating_conditions(
     m.fs.RO.initialize(optarg=solver.options)
 
     m.fs.RO.recovery_mass_phase_comp[0, "Liq", "H2O"].fix(water_recovery)
+    m.fs.product.properties[0].mass_frac_phase_comp["Liq", "NaCl"].setub(0.0005)
 
     # check degrees of freedom
     if degrees_of_freedom(m) != 0:
@@ -366,13 +406,16 @@ def solve(blk, solver=None, tee=False, check_termination=True):
     return results
 
 
-def initialize_system(m, solver=None):
+def initialize_system(m, solver=None, skipRO=False):
     if solver is None:
         solver = get_solver()
     optarg = solver.options
 
-    # ---initialize RO---
-    m.fs.RO.initialize(optarg=optarg)
+    if skipRO is False:
+        # ---initialize RO---
+        m.fs.RO.initialize(optarg=optarg)
+    else:
+        pass
 
     # ---initialize feed block---
     m.fs.feed.initialize(optarg=optarg)
@@ -461,9 +504,6 @@ def initialize_pump_as_turbine(m, optarg):
 
 
 def optimize_set_up(m):
-    # objective
-    m.fs.objective = Objective(expr=m.fs.costing.LCOW)
-
     # unfix decision variables and add bounds
     # pump 1 and pump 2
     m.fs.P1.control_volume.properties_out[0].pressure.unfix()
@@ -482,43 +522,6 @@ def optimize_set_up(m):
     m.fs.RO.area.unfix()
     m.fs.RO.area.setlb(1)
     m.fs.RO.area.setub(150)
-
-    # additional specifications
-    m.fs.product_salinity = Param(
-        initialize=500e-6, mutable=True
-    )  # product NaCl mass fraction [-]
-    m.fs.minimum_water_flux = Param(
-        initialize=1.0 / 3600.0, mutable=True
-    )  # minimum water flux [kg/m2-s]
-
-    # additional constraints
-    m.fs.product.properties[0].mass_frac_phase_comp["Liq", "NaCl"].setub(0.05)
-    m.fs.RO.flux_mass_phase_comp[0, 1, "Liq", "H2O"].setlb(1 / 3600)
-
-    # # fix bep flowrate instead of flow ratio for pumps 1 and 2
-    # m.fs.P1.bep_flow.fix(m.ro_mp.fs.P1.bep_flow())
-    # m.fs.P1.flow_ratio[0].unfix()
-    #
-    # m.fs.P2.bep_flow.fix(m.ro_mp.fs.P2.bep_flow())
-    # m.fs.P2.flow_ratio[0].unfix()
-
-    # fix the mass fraction of nacl instead of the mass flow rate
-    mass_frac_nacl = m.fs.feed.properties[0.0].mass_frac_phase_comp["Liq", "NaCl"].value
-    m.fs.feed.properties[0].mass_frac_phase_comp["Liq", "NaCl"].fix(mass_frac_nacl)
-    m.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "NaCl"].unfix()
-
-    print("\nUnfixing operational variables...")
-
-    # unfix operational variables - water recovery and feed flow rate
-    m.fs.RO.recovery_mass_phase_comp[0, "Liq", "H2O"].unfix()
-    m.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].unfix()
-
-    # set variable bounds
-    m.fs.RO.recovery_mass_phase_comp[0, "Liq", "H2O"].setub(0.7)
-    m.fs.RO.recovery_mass_phase_comp[0, "Liq", "H2O"].setlb(0.3)
-
-    m.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].setub(2.5)
-    m.fs.feed.properties[0.0].flow_mass_phase_comp["Liq", "H2O"].setlb(0.0)
 
     # ---checking model---
     # assert_degrees_of_freedom(m, 1)
@@ -632,5 +635,9 @@ def display_state(m):
 
 
 if __name__ == "__main__":
-    # m = main(erd_type=ERDtype.pressure_exchanger)
-    m = main(erd_type=ERDtype.pump_as_turbine)
+    # m = main(
+    #     erd_type=ERDtype.pressure_exchanger, variable_efficiency=VariableEfficiency.none
+    # )
+    m = main(
+        erd_type=ERDtype.pump_as_turbine, variable_efficiency=VariableEfficiency.flow
+    )

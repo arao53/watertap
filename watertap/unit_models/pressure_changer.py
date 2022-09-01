@@ -12,7 +12,7 @@
 ###############################################################################
 
 from pyomo.common.config import ConfigBlock, ConfigValue, In
-from pyomo.environ import Var, units as pyunits, Expr_if, value
+from pyomo.environ import Var, units as pyunits, Expr_if, value, Expression
 
 from enum import Enum, auto
 
@@ -98,9 +98,9 @@ class PumpIsothermalData(PumpData):
             # add constraints
             @self.Constraint(self.flowsheet().time, doc="Pump flow ratio")
             def flow_ratio_constraint(b, t):
-                return (
-                    b.flow_ratio[t] * b.bep_flow
-                    == b.control_volume.properties_in[t].flow_vol
+
+                return b.flow_ratio[t] * b.bep_flow == (
+                    b.control_volume.properties_out[t].flow_vol_phase["Liq"]
                 )
 
         if self.config.variable_efficiency is VariableEfficiency.flow:
