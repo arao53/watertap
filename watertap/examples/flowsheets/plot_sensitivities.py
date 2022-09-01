@@ -117,14 +117,18 @@ def line_sensitivities(path_to_results):
     ylabel2 = column_names[2]
     ylabel3 = column_names[3]
     ylabel4 = column_names[4]
+    ylabel5 = column_names[5]
+    ylabel6 = column_names[6]
 
     x = df[xlabel].values
     y1 = df[ylabel1].values
     y2 = df[ylabel2].values
     y3 = df[ylabel3].values
     y4 = df[ylabel4].values
+    y5 = df[ylabel5].values
+    y6 = df[ylabel6].values
 
-    fig, ax = plt.subplots(2, 2)
+    fig, ax = plt.subplots(3, 2)
     fig.suptitle("Electricity price sensitivity")
     ax[0, 0].plot(x, y1)
     ax[0, 0].set_xlabel(xlabel)
@@ -141,6 +145,14 @@ def line_sensitivities(path_to_results):
     ax[1, 1].plot(x, y4)
     ax[1, 1].set_xlabel(xlabel)
     ax[1, 1].set_ylabel(ylabel4 + "[bar]")
+
+    ax[2, 0].plot(x, y5)
+    ax[2, 0].set_xlabel(xlabel)
+    ax[2, 0].set_ylabel(ylabel5 + "[m2]")
+
+    ax[2, 1].plot(x, y6)
+    ax[2, 1].set_xlabel(xlabel)
+    ax[2, 1].set_ylabel(ylabel6 + "[kgCO2eq/m3]")
     return fig, ax
 
 
@@ -279,11 +291,11 @@ def bar_plot(path_to_results):
 
 if __name__ == "__main__":
     current_dir = os.getcwd()
-    file_of_interest = "RO_with_energy_recovery\\sensitivity_4.csv"
+    file_of_interest = "RO_with_energy_recovery\\sensitivity_2.csv"
     path = os.path.join(current_dir, file_of_interest)
 
-    # # line sensitivities
-    # fig, ax = line_sensitivities(path)
+    # line sensitivities
+    fig, ax = line_sensitivities(path)
     #
     # contour plot
     # fig1, ax1 = contour_figure(
@@ -300,8 +312,8 @@ if __name__ == "__main__":
     # fig4, ax4 = bar_plot(path)
 
     # carbon intensity contour
-    fig5, ax5 = carbon_intensity_contour(
-        path,
-        plot_type="contourf",
-        zcol=3,
-    )
+    # fig5, ax5 = carbon_intensity_contour(
+    #     path,
+    #     plot_type="contourf",
+    #     zcol=3,
+    # )

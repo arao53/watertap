@@ -26,7 +26,7 @@ from pyomo.network import Arc
 
 from idaes.core import FlowsheetBlock
 from idaes.core.solvers import get_solver
-from idaes.core.util.model_statistics import degrees_of_freedom
+from idaes.core.util.model_statistics import degrees_of_freedom, number_total_objectives
 from idaes.core.util.initialization import solve_indexed_blocks, propagate_state
 from idaes.models.unit_models import Mixer, Separator, Product, Feed
 from idaes.models.unit_models.mixer import MomentumMixingType
@@ -260,6 +260,7 @@ def set_operating_conditions(
 
     if solver is None:
         solver = get_solver()
+    m.fs.objective = Objective(expr=m.fs.costing.LCOW)
 
     # ---specifications---
     # feed
