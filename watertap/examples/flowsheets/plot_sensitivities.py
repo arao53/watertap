@@ -2,6 +2,12 @@ import sys, os, time
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import matplotlib
+
+matplotlib.rc("font", size=10)
+plt.rc("axes", titlesize=8)
+scaling_obj = 1
+scaling_factor = 1
 
 
 def contour_figure(

@@ -44,7 +44,7 @@ def run_analysis(case_num, nx, interpolate_nan_outputs):
         m.fs.RO.area.fix()
         m.fs.P1.bep_flow.fix()
         m.fs.P1.flow_ratio[0].unfix()
-        m.fs.P1.flow_ratio[0].setub(1.2)
+        m.fs.P1.flow_ratio[0].setub(1)
         m.fs.P1.control_volume.properties_out[0].pressure.unfix()
         m.fs.RO.recovery_mass_phase_comp[0.0, "Liq", "H2O"].unfix()
         m.fs.RO.mixed_permeate[0].conc_mass_phase_comp["Liq", "NaCl"].setub(0.5)
@@ -91,7 +91,7 @@ def run_analysis(case_num, nx, interpolate_nan_outputs):
     return global_results, sweep_params, m
 
 
-def main(case_num=2, nx=41, interpolate_nan_outputs=False):
+def main(case_num=2, nx=21, interpolate_nan_outputs=False):
     # when from the command line
     case_num = int(case_num)
     nx = int(nx)
