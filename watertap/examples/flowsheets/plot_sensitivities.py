@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib
 
 matplotlib.rc("font", size=10)
-plt.rc("axes", titlesize=8)
+plt.rc("axes", titlesize=10)
 scaling_obj = 1
 scaling_factor = 1
 
@@ -295,14 +295,64 @@ def bar_plot(path_to_results):
     return fig, ax
 
 
+def electricity_price_breakdown(path_to_results):
+    df = pd.read_csv(path_to_results)
+    column_names = df.columns.to_numpy()
+
+    xlabel = "# electricity_price"
+    y1_label = "annual_capex"
+    y2_label = "annual_opex"
+
+    fig, ax = plt.subplots()
+
+    x = df[xlabel].values
+    y1 = df[y1_label].values
+    y2 = df[y2_label].values
+
+    ax.plot(x, y1, label=y1_label)
+    ax.plot(x, y2, label=y2_label)
+
+    ax.set_xlabel("Electricity Price $/kWh")
+    ax.set_ylabel("Cost $/year")
+
+    plt.legend()
+
+    return fig, ax
+
+
+def breakeven_electricity_price(path_to_results):
+    df = pd.read_csv(path_to_results)
+    column_names = df.columns.to_numpy()
+
+    xlabel = "baseline_cost"
+    y1_label = "electricity_price"
+
+    fig, ax = plt.subplots()
+
+    x = df[xlabel].values
+    y1 = df[y1_label].values
+
+    ax.plot(x, y1)
+    ax.text(500, 0.12, "Flexiblity may be optimal")
+    ax.text(1400, 0.03, "Fixed is optimal")
+
+    ax.set_xlabel("Baseline cost $/m3/day")
+    ax.set_ylabel("Electricity price $/m3")
+    ax.set_title("Breakeven for reduced operations")
+
+    return fig, ax
+
+
 if __name__ == "__main__":
     current_dir = os.getcwd()
-    file_of_interest = "RO_with_energy_recovery\\sensitivity_2.csv"
+    file_of_interest = "RO_with_energy_recovery\\sensitivity_5.csv"
     path = os.path.join(current_dir, file_of_interest)
 
     # line sensitivities
-    fig, ax = line_sensitivities(path)
-    #
+    # fig, ax = line_sensitivities(path)
+
+    fig, ax = breakeven_electricity_price(file_of_interest)
+
     # contour plot
     # fig1, ax1 = contour_figure(
     #     path, plot_type="contourf", levels=48, isolines=[0, 100, 200]

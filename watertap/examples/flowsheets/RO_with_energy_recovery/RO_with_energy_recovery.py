@@ -11,6 +11,8 @@
 #
 ###############################################################################
 import os
+
+from pyomo.core.util import Expression
 from pyomo.environ import (
     ConcreteModel,
     value,
@@ -565,12 +567,18 @@ def display_system(m):
     )
     print("Levelized cost of water: %.2f $/m3" % value(m.fs.costing.LCOW))
 
-    baseline_cap = (
-        m.fs.costing.total_investment_cost()
-        * 365
-        / m.fs.costing.annual_water_production()
+    m.fs.costing.annual_investment = Expression(
+        expr=m.fs.costing.total_investment_cost
+        * m.fs.costing.factor_capital_annualization,
+        doc="Annualized capital cost $/year",
     )
-    print("Baseline daily cost: %.2f $/m3/day" % baseline_cap)
+
+    m.fs.costing.baseline_daily_cost = Expression(
+        expr=pyunits.convert(
+            m.fs.costing.total_investment_cost / m.fs.costing.annual_water_production,
+            to_units=pyunits.USD_2018 * pyunits.day / pyunits.m**3,
+        )
+    )
 
 
 def display_design(m):
